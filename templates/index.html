@@ -1,0 +1,109 @@
+{% include "header.html" %}
+
+<header class="masthead video-masthead">
+  <video autoplay muted loop playsinline class="video-bg">
+    <source src="{{ url_for('static', filename='assets/img/blog-bg.mp4') }}" type="video/mp4">
+  </video>
+  <div class="container position-relative px-4 px-lg-5">
+    <div class="row gx-4 gx-lg-5 justify-content-center">
+      <div class="col-md-10 col-lg-8 col-xl-7">
+        <div class="site-heading text-center">
+          <h1 class="floating-text sanskrit-title">तरंगीता</h1>
+          <span class="subheading breathing-text">... where reflection begins<br>and ripples follow ...</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<div class="container-fluid px-4 px-lg-5 py-5" style="max-width: 1200px;">
+  <div class="row justify-content-center">
+    <div class="col-12">
+      <div class="mb-4 text-center" id="posts">
+        <div class="d-flex flex-wrap gap-2 align-items-center justify-content-center">
+          <a href="{{ url_for('get_all_posts') }}#posts" class="btn btn-sm {{ 'btn-primary' if not selected_category else 'btn-outline-secondary' }}">All</a>
+          {% for category in categories %}
+          <a href="{{ url_for('get_all_posts', category=category.id) }}#posts" class="btn btn-sm {{ 'btn-primary' if selected_category == category.id else 'btn-outline-secondary' }}">{{ category.name }}</a>
+          {% endfor %}
+        </div>
+      </div>
+
+      {% if current_user.is_authenticated and current_user.email == "dishasawantt@gmail.com" %}
+      <div class="d-flex justify-content-center mb-4">
+        <a class="btn btn-primary btn-lg" href="{{ url_for('add_new_post') }}"><i class="fas fa-pen me-2"></i>Create New Post</a>
+      </div>
+      {% endif %}
+
+      <div class="posts-grid">
+        {% for post in all_posts %}
+        <div class="post-card">
+          <a href="{{ url_for('show_post', post_id=post.id) }}" class="post-card-link">
+            {% if post.category %}<span class="post-category">{{ post.category.name }}</span>{% endif %}
+            <h2 class="post-card-title">{{ post.title }}</h2>
+            <p class="post-card-subtitle">{{ post.subtitle }}</p>
+            <div class="post-card-meta"><span>{{ post.author.name }}</span><span>·</span><span>{{ post.date }}</span></div>
+          </a>
+          {% if current_user.is_authenticated and current_user.email == "dishasawantt@gmail.com" %}
+          <a href="{{ url_for('delete_post', post_id=post.id) }}" class="post-delete" title="Delete"><i class="fas fa-trash-alt"></i></a>
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+
+      {% if not all_posts %}
+      <div class="text-center py-5">
+        <i class="fas fa-feather-alt fa-3x mb-3" style="color: var(--soft-teal);"></i>
+        <p class="lead" style="color: var(--soft-gray);">No posts yet. Start writing!</p>
+      </div>
+      {% endif %}
+
+      {% if pagination and pagination.pages > 1 %}
+      <nav aria-label="Page navigation" class="mt-5">
+        <ul class="pagination justify-content-center">
+          {% if pagination.has_prev %}
+          <li class="page-item"><a class="page-link" href="{{ url_for('get_all_posts', page=pagination.prev_num, category=selected_category) }}"><i class="fas fa-arrow-left me-1"></i> Newer</a></li>
+          {% endif %}
+          <li class="page-item disabled"><span class="page-link">{{ pagination.page }} / {{ pagination.pages }}</span></li>
+          {% if pagination.has_next %}
+          <li class="page-item"><a class="page-link" href="{{ url_for('get_all_posts', page=pagination.next_num, category=selected_category) }}">Older <i class="fas fa-arrow-right ms-1"></i></a></li>
+          {% endif %}
+        </ul>
+      </nav>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<script>
+window.addEventListener('load', function() {
+  if (window.location.hash === '#posts') {
+    window.scrollTo(0, 0);
+    setTimeout(function() {
+      var target = document.getElementById('posts');
+      if (target) {
+        var end = target.getBoundingClientRect().top + window.pageYOffset - 20;
+        var start = 0, startTime = null, duration = 500;
+        function animate(time) {
+          if (!startTime) startTime = time;
+          var progress = Math.min((time - startTime) / duration, 1);
+          var ease = progress < 0.5 ? 2 * progress * progress : 1 - Math.pow(-2 * progress + 2, 2) / 2;
+          window.scrollTo(0, start + (end - start) * ease);
+          if (progress < 1) requestAnimationFrame(animate);
+        }
+        requestAnimationFrame(animate);
+      }
+    }, 100);
+  }
+  
+  // Golden glow on music button
+  var musicBtn = document.getElementById('musicToggle');
+  if (musicBtn) {
+    musicBtn.classList.add('shine-btn');
+    setTimeout(function() {
+      musicBtn.classList.remove('shine-btn');
+    }, 10000);
+  }
+});
+</script>
+
+{% include "footer.html" %}

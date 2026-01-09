@@ -1,0 +1,43 @@
+{% from "bootstrap5/form.html" import render_form %}
+{% include "header.html" %}
+
+<header class="masthead page-masthead" style="background-image: url('../static/assets/img/contact-bg.jpg')">
+  <div class="container position-relative px-4 px-lg-5">
+    <div class="row gx-4 gx-lg-5 justify-content-center">
+      <div class="col-md-10 col-lg-8 col-xl-7">
+        <div class="page-heading no-box">
+          {% if msg_sent %}
+          <h1>Message Sent!</h1>
+          <span class="subheading">Thank you for reaching out.</span>
+          {% else %}
+          <h1>Contact Me</h1>
+          <span class="subheading cursive-text">Like something? Didn't like something? Let's talk.</span>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main class="mb-4">
+  <div class="container px-4 px-lg-5">
+    <div class="row gx-4 gx-lg-5 justify-content-center">
+      <div class="col-md-10 col-lg-8 col-xl-7">
+        {% if msg_sent %}
+        <div class="text-center">
+          <p class="lead">Your message has been received.</p>
+          <a href="{{ url_for('get_all_posts') }}" class="btn btn-primary">Back to Home</a>
+        </div>
+        {% else %}
+        <p>Want to get in touch? Fill out the form below and I will get back to you!</p>
+        <div class="my-5">
+          <p class="text-muted mb-3">Sending as: <strong>{{ current_user.name }}</strong> ({{ current_user.email }})</p>
+          {{ render_form(form, novalidate=True, button_map={"submit": "primary"}) }}
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</main>
+
+{% include "footer.html" %}

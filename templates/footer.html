@@ -1,0 +1,117 @@
+<footer>
+  <div class="container px-4 px-lg-5">
+    <div class="row gx-4 gx-lg-5 justify-content-center">
+      <div class="col-md-10 col-lg-8 col-xl-7">
+        <ul class="list-inline text-center mb-4">
+          <li class="list-inline-item">
+            <a href="https://dishasawantt.github.io/resume/" target="_blank"><span class="fa-stack fa-lg"><i class="fas fa-circle fa-stack-2x"></i><i class="fas fa-briefcase fa-stack-1x fa-inverse"></i></span></a>
+          </li>
+          <li class="list-inline-item">
+            <a href="https://www.instagram.com/dishasawantt/" target="_blank"><span class="fa-stack fa-lg"><i class="fas fa-circle fa-stack-2x"></i><i class="fab fa-instagram fa-stack-1x fa-inverse"></i></span></a>
+          </li>
+          <li class="list-inline-item">
+            <a href="https://www.linkedin.com/in/disha-sawant-7877b21b6/" target="_blank"><span class="fa-stack fa-lg"><i class="fas fa-circle fa-stack-2x"></i><i class="fab fa-linkedin-in fa-stack-1x fa-inverse"></i></span></a>
+          </li>
+        </ul>
+        <div class="small text-center fst-italic" style="color: var(--light-teal);">
+          Made with <i class="fas fa-heart" style="color: var(--coral);"></i> by Disha · 2026
+        </div>
+      </div>
+    </div>
+  </div>
+</footer>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="{{ url_for('static', filename='js/scripts.js') }}"></script>
+<audio id="bgMusic" loop preload="auto">
+  <source src="{{ url_for('static', filename='assets/relaxing-music-with-nature-sound-and-flute-284493.mp3') }}" type="audio/mpeg">
+</audio>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  // Theme toggle
+  var themeBtn = document.getElementById('themeToggle');
+  var themeSaved = localStorage.getItem('theme') || 'light';
+  
+  function applyTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    themeBtn.innerHTML = theme === 'dark' ? '<i class="fas fa-sun"></i>' : '<i class="fas fa-moon"></i>';
+    localStorage.setItem('theme', theme);
+  }
+  
+  applyTheme(themeSaved);
+  
+  themeBtn.onclick = function() {
+    var current = document.documentElement.getAttribute('data-theme');
+    applyTheme(current === 'dark' ? 'light' : 'dark');
+  };
+  
+  // Music toggle with persistence
+  var music = document.getElementById('bgMusic');
+  var musicBtn = document.getElementById('musicToggle');
+  music.volume = 0.3;
+  
+  function updateMusicBtn() {
+    musicBtn.innerHTML = music.paused ? '<i class="fas fa-volume-mute"></i>' : '<i class="fas fa-volume-up"></i>';
+  }
+  
+  // Restore position from previous page
+  var savedTime = parseFloat(localStorage.getItem('musicTime')) || 0;
+  var musicState = localStorage.getItem('musicPlaying');
+  var shouldPlay = musicState !== 'false'; // Default ON unless explicitly turned off
+  
+  music.currentTime = savedTime;
+  
+  function tryPlay() {
+    if (shouldPlay && music.paused) {
+      music.play().then(updateMusicBtn).catch(function() { updateMusicBtn(); });
+    } else {
+      updateMusicBtn();
+    }
+  }
+  
+  tryPlay();
+  
+  // Browsers block autoplay - try again on first user interaction
+  function onFirstInteraction() {
+    if (shouldPlay && music.paused) {
+      music.play().then(updateMusicBtn).catch(function() {});
+    }
+    document.removeEventListener('click', onFirstInteraction);
+    document.removeEventListener('touchstart', onFirstInteraction);
+    document.removeEventListener('keydown', onFirstInteraction);
+  }
+  
+  document.addEventListener('click', onFirstInteraction);
+  document.addEventListener('touchstart', onFirstInteraction);
+  document.addEventListener('keydown', onFirstInteraction);
+  
+  musicBtn.onclick = function() {
+    if (music.paused) {
+      music.play();
+      localStorage.setItem('musicPlaying', 'true');
+    } else {
+      music.pause();
+      localStorage.setItem('musicPlaying', 'false');
+    }
+    updateMusicBtn();
+  };
+  
+  music.onplay = updateMusicBtn;
+  music.onpause = updateMusicBtn;
+  
+  // Save position before leaving page
+  window.addEventListener('beforeunload', function() {
+    localStorage.setItem('musicTime', music.currentTime);
+    localStorage.setItem('musicPlaying', (!music.paused).toString());
+  });
+  
+  // Also save periodically in case beforeunload doesn't fire
+  setInterval(function() {
+    if (!music.paused) {
+      localStorage.setItem('musicTime', music.currentTime);
+    }
+  }, 1000);
+});
+</script>
+</body>
+</html>
+

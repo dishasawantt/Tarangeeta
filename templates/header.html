@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+  <meta name="description" content="तरंगीता - A space for reflection" />
+  <meta name="author" content="Disha" />
+  <title>तरंगीता | Tarangeeta</title>
+  {% block styles %}
+  {{ bootstrap.load_css() }}
+  <link rel="icon" type="image/png" href="{{ url_for('static', filename='assets/img/favicon.png') }}" />
+  <script src="https://use.fontawesome.com/releases/v6.3.0/js/all.js" crossorigin="anonymous"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Lora:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Yatra+One&family=Dancing+Script:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link href="{{ url_for('static', filename='css/styles.css') }}?v=33" rel="stylesheet" />
+  <link href="{{ url_for('static', filename='css/custom.css') }}?v=38" rel="stylesheet" />
+  <script>document.documentElement.setAttribute('data-theme', localStorage.getItem('theme') || 'light');</script>
+  {% endblock %}
+</head>
+<body>
+  <nav class="navbar navbar-expand-lg" id="mainNav">
+    <div class="container px-4 px-lg-5">
+      <a class="navbar-brand sanskrit-nav" href="/">तरंगीता</a>
+      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+        Menu <i class="fas fa-bars"></i>
+      </button>
+      <div class="collapse navbar-collapse" id="navbarResponsive">
+        <ul class="navbar-nav ms-auto py-4 py-lg-0">
+          <li class="nav-item"><a class="nav-link px-lg-3 py-3 py-lg-4" href="{{ url_for('get_all_posts') }}">Home</a></li>
+          {% if not current_user.is_authenticated %}
+          <li class="nav-item"><a class="nav-link px-lg-3 py-3 py-lg-4" href="{{ url_for('login') }}">Login</a></li>
+          <li class="nav-item"><a class="nav-link px-lg-3 py-3 py-lg-4" href="{{ url_for('register') }}">Register</a></li>
+          {% else %}
+          <li class="nav-item"><a class="nav-link px-lg-3 py-3 py-lg-4" href="{{ url_for('logout') }}">Log Out</a></li>
+          {% endif %}
+          {% if current_user.is_authenticated and current_user.email == "dishasawantt@gmail.com" %}
+          <li class="nav-item"><a class="nav-link px-lg-3 py-3 py-lg-4" href="{{ url_for('view_messages') }}">Messages</a></li>
+          {% endif %}
+          <li class="nav-item"><a class="nav-link px-lg-3 py-3 py-lg-4" href="{{ url_for('about') }}">About</a></li>
+          <li class="nav-item"><a class="nav-link px-lg-3 py-3 py-lg-4" href="{{ url_for('contact') }}">Contact</a></li>
+          <li class="nav-item">
+            <form class="d-flex py-3 py-lg-0" action="{{ url_for('search') }}" method="GET">
+              <input class="form-control search-input me-2" type="search" name="query" placeholder="Search..." aria-label="Search" />
+              <button class="btn btn-search" type="submit"><i class="fas fa-search"></i></button>
+            </form>
+          </li>
+          <li class="nav-item">
+            <button class="btn theme-toggle ms-2" id="themeToggle" aria-label="Toggle theme">
+              <i class="fas fa-moon"></i>
+            </button>
+          </li>
+          <li class="nav-item">
+            <button class="btn theme-toggle ms-2" id="musicToggle" aria-label="Toggle music">
+              <i class="fas fa-volume-mute"></i>
+            </button>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </nav>

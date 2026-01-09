@@ -1,0 +1,56 @@
+{% include "header.html" %}
+
+<header class="masthead page-masthead" style="background-image: url('../static/assets/img/about-bg.jpg')">
+  <div class="container position-relative px-4 px-lg-5">
+    <div class="row gx-4 gx-lg-5 justify-content-center">
+      <div class="col-md-10 col-lg-8 col-xl-7">
+        <div class="site-heading">
+          <h1>Search Results</h1>
+          <span class="subheading">{% if query %}Results for "{{ query }}"{% endif %}</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<div class="container px-4 px-lg-5">
+  <div class="row gx-4 gx-lg-5 justify-content-center">
+    <div class="col-md-10 col-lg-8 col-xl-7">
+      {% if posts %}
+      <p class="text-muted mb-4">Found {{ pagination.total }} result(s)</p>
+      {% for post in posts %}
+      <div class="post-preview">
+        <a href="{{ url_for('show_post', post_id=post.id) }}">
+          <h2 class="post-title">{{ post.title }}</h2>
+          <h3 class="post-subtitle">{{ post.subtitle }}</h3>
+        </a>
+        <p class="post-meta">Posted by <a href="#">{{ post.author.name }}</a> on {{ post.date }}
+          {% if post.category %}<span class="badge bg-secondary ms-2">{{ post.category.name }}</span>{% endif %}
+        </p>
+      </div>
+      <hr class="my-4" />
+      {% endfor %}
+
+      {% if pagination and pagination.pages > 1 %}
+      <nav>
+        <ul class="pagination justify-content-center">
+          {% if pagination.has_prev %}<li class="page-item"><a class="page-link" href="{{ url_for('search', query=query, page=pagination.prev_num) }}">← Previous</a></li>{% endif %}
+          <li class="page-item disabled"><span class="page-link">{{ pagination.page }} / {{ pagination.pages }}</span></li>
+          {% if pagination.has_next %}<li class="page-item"><a class="page-link" href="{{ url_for('search', query=query, page=pagination.next_num) }}">Next →</a></li>{% endif %}
+        </ul>
+      </nav>
+      {% endif %}
+      {% elif query %}
+      <div class="text-center py-5">
+        <i class="fas fa-search fa-3x text-muted mb-3"></i>
+        <p class="lead text-muted">No posts found for "{{ query }}"</p>
+        <a href="{{ url_for('get_all_posts') }}" class="btn btn-primary">Back to Home</a>
+      </div>
+      {% else %}
+      <div class="text-center py-5"><p class="text-muted">Enter a search term to find posts.</p></div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+{% include "footer.html" %}

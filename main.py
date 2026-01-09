@@ -40,6 +40,7 @@ cloudinary.config(
 
 MAIL_ADDRESS = os.environ.get('MAIL_ADDRESS')
 MAIL_APP_PASSWORD = os.environ.get('MAIL_APP_PASSWORD')
+MUSIC_URL = os.environ.get('MUSIC_URL', 'https://res.cloudinary.com/dxxkklkqy/video/upload/v1767996842/relaxing-music-with-nature-sound-and-flute-284493_ayiq0g.mp3')
 
 def send_email(name, email, message):
     if not MAIL_ADDRESS or not MAIL_APP_PASSWORD:
@@ -82,7 +83,8 @@ def send_verification_email(email, token, base_url):
 login_manager = LoginManager()
 login_manager.init_app(app)
 
-os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
+if os.environ.get('FLASK_DEBUG') or os.environ.get('FLASK_ENV') == 'development':
+    os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
 
 google_bp = make_google_blueprint(
     client_id=os.environ.get('GOOGLE_CLIENT_ID'),
@@ -171,8 +173,8 @@ def gravatar_filter(email, size=100):
 
 
 @app.context_processor
-def inject_search_form():
-    return dict(search_form=SearchForm())
+def inject_globals():
+    return dict(search_form=SearchForm(), ADMIN_EMAIL=ADMIN_EMAIL, MUSIC_URL=MUSIC_URL)
 
 
 def admin_only(f):

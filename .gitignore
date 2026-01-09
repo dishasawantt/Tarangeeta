@@ -4,4 +4,5 @@ instance/
 .env
 *.pyc
 .DS_Store
+*.mp3
 

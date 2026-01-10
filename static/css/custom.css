@@ -858,6 +858,12 @@ video {
 [data-theme="dark"] .comment-author { color: #E8DDD0; }
 [data-theme="dark"] .comment-text { color: #D8D0C8; }
 
+/* Responsive images in posts */
+.post-content img {
+  max-width: 100%;
+  height: auto;
+}
+
 /* Image alignment in posts */
 .post-content img[align="center"], .post-content img[style*="margin-left: auto"][style*="margin-right: auto"] {
   display: block;

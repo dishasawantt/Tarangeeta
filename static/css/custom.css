@@ -861,7 +861,9 @@ video {
 /* Responsive images in posts */
 .post-content img {
   max-width: 100%;
+  width: auto;
   height: auto;
+  object-fit: contain;
 }
 
 /* Image alignment in posts */

@@ -574,6 +574,22 @@ article {
   background: linear-gradient(to bottom, #F5EFE4 0%, #FAF6ED 50%, #F5EFE4 100%);
 }
 
+.canvas-post-wrapper {
+  max-width: 950px;
+  overflow: hidden;
+  position: relative;
+  box-shadow: 0 2px 15px rgba(0,0,0,0.06);
+  border: 1px solid rgba(139, 119, 92, 0.12);
+}
+
+.canvas-post-wrapper #canvasFrame {
+  width: 1000px;
+  height: 1400px;
+  border: 0;
+  transform-origin: top left;
+  display: block;
+}
+
 .post-content {
   max-width: 950px;
   margin: 0 auto;

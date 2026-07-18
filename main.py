@@ -9,7 +9,7 @@ from datetime import date
 from functools import wraps
 
 from dotenv import load_dotenv
-from flask import Flask, abort, render_template, redirect, url_for, flash, request, g
+from flask import Flask, abort, render_template, redirect, url_for, flash, request, g, jsonify
 from flask_bootstrap import Bootstrap5
 from flask_ckeditor import CKEditor, upload_success, upload_fail
 from flask_login import UserMixin, login_user, LoginManager, current_user, logout_user
@@ -23,7 +23,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 import cloudinary
 import cloudinary.uploader
 
-from forms import CreatePostForm, RegisterForm, LoginForm, CommentForm, SearchForm, ContactForm
+from forms import CreatePostForm, CreateCanvasPostForm, RegisterForm, LoginForm, CommentForm, SearchForm, ContactForm
 
 load_dotenv()
 
@@ -151,6 +151,10 @@ class BlogPost(db.Model):
     body: Mapped[str] = mapped_column(Text, nullable=False)
     media_url: Mapped[str] = mapped_column(String(500), nullable=False)
     media_type: Mapped[str] = mapped_column(String(10), nullable=False, default='image')
+    layout_type: Mapped[str] = mapped_column(String(20), nullable=False, default='article')
+    canvas_data: Mapped[str] = mapped_column(Text, nullable=True)
+    canvas_html: Mapped[str] = mapped_column(Text, nullable=True)
+    canvas_css: Mapped[str] = mapped_column(Text, nullable=True)
     comments = relationship("Comment", back_populates="parent_post", cascade="all, delete-orphan")
 
 
@@ -198,7 +202,7 @@ def gravatar_filter(email, size=100):
 
 @app.context_processor
 def inject_globals():
-    return dict(search_form=SearchForm(), ADMIN_EMAIL=ADMIN_EMAIL, MUSIC_URL=MUSIC_URL, csp_nonce=g.csp_nonce)
+    return dict(search_form=SearchForm(), ADMIN_EMAIL=ADMIN_EMAIL, MUSIC_URL=MUSIC_URL, csp_nonce=getattr(g, 'csp_nonce', ''))
 
 
 @app.before_request
@@ -206,16 +210,22 @@ def set_csp_nonce():
     g.csp_nonce = secrets.token_urlsafe(16)
 
 
-# CKEditor 4 bootstraps its editable area by injecting an inline <script> into
-# its own iframe document, which can't carry our per-request nonce. A strict
-# nonce-only script-src silently leaves the editor uneditable, so the two
-# admin editing pages get a relaxed (still self-hosted-only) policy instead.
-CKEDITOR_ENDPOINTS = {'add_new_post', 'edit_post'}
+# CKEditor 4 and GrapesJS both bootstrap their editing surfaces by injecting
+# inline <script>/<style> into their own iframe documents, which can't carry
+# our per-request nonce. A strict nonce-only script-src silently breaks them,
+# so these admin editing pages get a relaxed (still self-hosted-only) policy.
+RICH_EDITOR_ENDPOINTS = {'add_new_post', 'edit_post', 'add_new_canvas_post', 'edit_post_canvas'}
+
+# The canvas post render is deliberately framed by our own post page (sandboxed
+# iframe), so it alone needs frame-ancestors 'self' instead of the site default.
+CANVAS_FRAME_ENDPOINT = 'show_post_canvas_frame'
 
 
 @app.after_request
 def set_security_headers(response):
-    script_src = "'self' 'unsafe-inline'" if request.endpoint in CKEDITOR_ENDPOINTS else f"'self' 'nonce-{g.csp_nonce}'"
+    nonce = getattr(g, 'csp_nonce', None) or secrets.token_urlsafe(16)
+    script_src = "'self' 'unsafe-inline'" if request.endpoint in RICH_EDITOR_ENDPOINTS else f"'self' 'nonce-{nonce}'"
+    frame_ancestors = "'self'" if request.endpoint == CANVAS_FRAME_ENDPOINT else "'none'"
     csp = (
         "default-src 'self'; "
         f"script-src {script_src} https://cdn.jsdelivr.net https://use.fontawesome.com https://cdn.ckeditor.com; "
@@ -225,13 +235,13 @@ def set_security_headers(response):
         "media-src 'self' https://res.cloudinary.com; "
         "connect-src 'self' https://cdn.ckeditor.com; "
         "form-action 'self' https://accounts.google.com; "
-        "frame-ancestors 'none'; "
+        f"frame-ancestors {frame_ancestors}; "
         "base-uri 'self'; "
         "object-src 'none'"
     )
     response.headers['Content-Security-Policy'] = csp
     response.headers['X-Content-Type-Options'] = 'nosniff'
-    response.headers['X-Frame-Options'] = 'DENY'
+    response.headers['X-Frame-Options'] = 'DENY' if frame_ancestors == "'none'" else 'SAMEORIGIN'
     response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
     response.headers['Permissions-Policy'] = 'geolocation=(), microphone=(), camera=()'
     if IS_PRODUCTION:
@@ -273,8 +283,25 @@ def init_categories():
     db.session.commit()
 
 
+def run_startup_migrations():
+    """db.create_all() only adds new tables, not new columns on existing ones."""
+    inspector = db.inspect(db.engine)
+    existing_columns = {col['name'] for col in inspector.get_columns('blog_posts')}
+    new_columns = {
+        'layout_type': "VARCHAR(20) DEFAULT 'article'",
+        'canvas_data': "TEXT",
+        'canvas_html': "TEXT",
+        'canvas_css': "TEXT",
+    }
+    for name, sql_type in new_columns.items():
+        if name not in existing_columns:
+            db.session.execute(db.text(f"ALTER TABLE blog_posts ADD COLUMN {name} {sql_type}"))
+    db.session.commit()
+
+
 with app.app_context():
     db.create_all()
+    run_startup_migrations()
     init_categories()
 
 
@@ -405,6 +432,14 @@ def show_post(post_id):
     return render_template("post.html", post=post, current_user=current_user, form=form)
 
 
+@app.route("/post/<int:post_id>/canvas-frame")
+def show_post_canvas_frame(post_id):
+    post = db.get_or_404(BlogPost, post_id)
+    if post.layout_type != 'canvas':
+        abort(404)
+    return render_template("post-canvas-frame.html", post=post)
+
+
 @app.route("/upload-ckeditor-image", methods=["POST"])
 @admin_only
 def upload_ckeditor_image():
@@ -415,6 +450,21 @@ def upload_ckeditor_image():
     if not url:
         return upload_fail(message="Image upload failed. Check Cloudinary configuration.")
     return upload_success(url=url, filename=f.filename)
+
+
+@app.route("/upload-canvas-image", methods=["POST"])
+@admin_only
+def upload_canvas_image():
+    urls = []
+    for f in request.files.getlist('files'):
+        if get_media_type(f.filename) != 'image':
+            continue
+        url, media_type = upload_media(f)
+        if url:
+            urls.append(url)
+    if not urls:
+        return jsonify(data=[]), 400
+    return jsonify(data=urls)
 
 
 @app.route("/new-post", methods=["GET", "POST"])
@@ -464,6 +514,62 @@ def edit_post(post_id):
         db.session.commit()
         return redirect(url_for("show_post", post_id=post.id))
     return render_template("make-post.html", form=form, is_edit=True, current_user=current_user, post=post)
+
+
+@app.route("/new-post-canvas", methods=["GET", "POST"])
+@admin_only
+def add_new_canvas_post():
+    form = CreateCanvasPostForm()
+    categories = db.session.execute(db.select(Category)).scalars().all()
+    form.category.choices = [(c.id, c.name) for c in categories]
+    if form.validate_on_submit():
+        media_url = form.media_url.data
+        media_type = get_media_type(media_url) if media_url else 'image'
+        if form.media_upload.data:
+            uploaded_url, uploaded_type = upload_media(form.media_upload.data)
+            if uploaded_url:
+                media_url, media_type = uploaded_url, uploaded_type
+        if not media_url:
+            flash("Please provide a media URL or upload an image/video.")
+            return render_template("make-canvas-post.html", form=form, current_user=current_user)
+        if not form.canvas_html.data:
+            flash("Please add some content to the canvas before saving.")
+            return render_template("make-canvas-post.html", form=form, current_user=current_user)
+        db.session.add(BlogPost(
+            title=form.title.data, subtitle=form.subtitle.data, body='',
+            media_url=media_url, media_type=media_type, author=current_user,
+            category_id=form.category.data, date=date.today().strftime("%B %d, %Y"),
+            layout_type='canvas', canvas_data=form.canvas_data.data,
+            canvas_html=form.canvas_html.data, canvas_css=form.canvas_css.data
+        ))
+        db.session.commit()
+        return redirect(url_for("get_all_posts"))
+    return render_template("make-canvas-post.html", form=form, current_user=current_user)
+
+
+@app.route("/edit-post-canvas/<int:post_id>", methods=["GET", "POST"])
+@admin_only
+def edit_post_canvas(post_id):
+    post = db.get_or_404(BlogPost, post_id)
+    categories = db.session.execute(db.select(Category)).scalars().all()
+    form = CreateCanvasPostForm(title=post.title, subtitle=post.subtitle, media_url=post.media_url,
+                                 category=post.category_id)
+    form.category.choices = [(c.id, c.name) for c in categories]
+    if form.validate_on_submit():
+        media_url = form.media_url.data
+        media_type = get_media_type(media_url) if media_url else post.media_type
+        if form.media_upload.data:
+            uploaded_url, uploaded_type = upload_media(form.media_upload.data)
+            if uploaded_url:
+                media_url, media_type = uploaded_url, uploaded_type
+        post.title, post.subtitle = form.title.data, form.subtitle.data
+        post.media_url, post.media_type = media_url, media_type
+        post.category_id = form.category.data
+        if form.canvas_html.data:
+            post.canvas_data, post.canvas_html, post.canvas_css = form.canvas_data.data, form.canvas_html.data, form.canvas_css.data
+        db.session.commit()
+        return redirect(url_for("show_post", post_id=post.id))
+    return render_template("make-canvas-post.html", form=form, is_edit=True, current_user=current_user, post=post)
 
 
 @app.route("/delete/<int:post_id>", methods=["POST"])

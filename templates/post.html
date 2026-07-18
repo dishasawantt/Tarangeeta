@@ -27,6 +27,25 @@
   <div class="container-fluid px-4 px-lg-5">
     <div class="row justify-content-center">
       <div class="col-12 col-lg-10 col-xl-9">
+        {% if post.layout_type == 'canvas' %}
+        <div class="canvas-post-wrapper mx-auto" id="canvasWrapper">
+          <iframe id="canvasFrame" src="{{ url_for('show_post_canvas_frame', post_id=post.id) }}" title="{{ post.title }}"></iframe>
+        </div>
+        <script nonce="{{ csp_nonce }}">
+        (function() {
+          var CANVAS_W = 1000, CANVAS_H = 1400;
+          var wrapper = document.getElementById('canvasWrapper');
+          var frame = document.getElementById('canvasFrame');
+          function rescale() {
+            var scale = wrapper.clientWidth / CANVAS_W;
+            frame.style.transform = 'scale(' + scale + ')';
+            wrapper.style.height = (CANVAS_H * scale) + 'px';
+          }
+          rescale();
+          window.addEventListener('resize', rescale);
+        })();
+        </script>
+        {% else %}
         {% if post.media_type == 'video' %}
         <div class="mb-4">
           <video controls class="w-100 rounded" style="max-height: 600px;">
@@ -34,12 +53,17 @@
           </video>
         </div>
         {% endif %}
-        
+
         <div class="post-content">{{ post.body|safe }}</div>
-        
+        {% endif %}
+
         {% if current_user.is_authenticated and current_user.email == ADMIN_EMAIL %}
         <div class="d-flex justify-content-end mb-4 mt-4">
+          {% if post.layout_type == 'canvas' %}
+          <a class="btn btn-primary" href="{{ url_for('edit_post_canvas', post_id=post.id) }}"><i class="fas fa-edit me-2"></i>Edit Post</a>
+          {% else %}
           <a class="btn btn-primary" href="{{ url_for('edit_post', post_id=post.id) }}"><i class="fas fa-edit me-2"></i>Edit Post</a>
+          {% endif %}
         </div>
         {% endif %}
 

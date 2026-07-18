@@ -1,0 +1,136 @@
+{% include "header.html" %}
+
+<header class="masthead page-masthead" style="background-image: url('https://res.cloudinary.com/dxxkklkqy/image/upload/q_auto,f_auto/v1767996799/edit-bg_xmzwg9.jpg')">
+  <div class="container position-relative px-4 px-lg-5">
+    <div class="row gx-4 gx-lg-5 justify-content-center">
+      <div class="col-md-10 col-lg-8 col-xl-7">
+        <div class="page-heading">
+          <h1>{% if is_edit %}Edit Canvas Post{% else %}New Canvas Post{% endif %}</h1>
+          <span class="subheading">Design it like a poster — drag, resize, place anything anywhere.</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/grapesjs/dist/css/grapes.min.css">
+<script nonce="{{ csp_nonce }}" src="https://cdn.jsdelivr.net/npm/grapesjs"></script>
+
+<main class="mb-4">
+  <div class="container-fluid px-4 px-lg-5">
+    <div class="row justify-content-center">
+      <div class="col-lg-8 col-md-10 mx-auto">
+        <form method="POST" enctype="multipart/form-data" id="canvasPostForm">
+          {{ form.hidden_tag() }}
+          <div class="mb-3">{{ form.title.label(class="form-label") }}{{ form.title(class="form-control") }}</div>
+          <div class="mb-3">{{ form.subtitle.label(class="form-label") }}{{ form.subtitle(class="form-control") }}</div>
+          <div class="mb-3">{{ form.category.label(class="form-label") }}{{ form.category(class="form-select") }}</div>
+          <div class="mb-3">
+            {{ form.media_url.label(class="form-label") }}
+            {{ form.media_url(class="form-control", placeholder="https://example.com/image.jpg") }}
+            <div class="form-text">Cover image shown at the top of the post (Enter a URL or upload below)</div>
+          </div>
+          <div class="mb-3">
+            {{ form.media_upload.label(class="form-label") }}{{ form.media_upload(class="form-control") }}
+          </div>
+          {% if is_edit and post %}
+          <div class="mb-3">
+            <label class="form-label">Current Cover Image</label>
+            <div class="border rounded p-2">
+              <img src="{{ post.media_url }}" class="img-fluid" style="max-height: 150px;" alt="Current cover">
+            </div>
+          </div>
+          {% endif %}
+        </form>
+      </div>
+    </div>
+
+    <div class="row justify-content-center mt-3">
+      <div class="col-12">
+        <div id="gjs-blocks" class="mb-2 d-flex gap-2 justify-content-center"></div>
+        <div id="gjs"></div>
+        <div class="d-flex justify-content-center mt-3">
+          <button type="button" id="canvasSaveBtn" class="btn btn-primary btn-lg">{{ form.submit.label.text }}</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script nonce="{{ csp_nonce }}">
+var CANVAS_W = 1000, CANVAS_H = 1400;
+
+var editor = grapesjs.init({
+  container: '#gjs',
+  fromElement: false,
+  height: '650px',
+  width: 'auto',
+  storageManager: false,
+  assetManager: {
+    uploadName: 'files',
+    upload: '{{ url_for("upload_canvas_image") }}',
+    headers: { 'X-CSRFToken': '{{ csrf_token() }}' },
+    autoAdd: true
+  },
+  canvas: {
+    styles: ['/static/css/editor-content.css?v=1']
+  },
+  blockManager: {
+    appendTo: '#gjs-blocks',
+    blocks: [
+      {
+        id: 'text-block',
+        label: 'Add Text',
+        content: {
+          type: 'text',
+          content: 'Double-click to edit this text',
+          dmode: 'absolute',
+          style: { position: 'absolute', top: '40px', left: '40px', width: '300px', 'font-family': "'Lora', serif", 'font-size': '18px', color: '#3D3D3D' }
+        }
+      },
+      {
+        id: 'image-block',
+        label: 'Add Image',
+        content: {
+          type: 'image',
+          dmode: 'absolute',
+          style: { position: 'absolute', top: '40px', left: '40px', width: '280px' }
+        }
+      }
+    ]
+  },
+  styleManager: {
+    sectors: [
+      { name: 'Typography', open: true, buildProps: ['font-family', 'font-size', 'font-weight', 'color', 'text-align'] },
+      { name: 'Dimension', open: true, buildProps: ['width', 'height'] }
+    ]
+  }
+});
+
+editor.on('load', function() {
+  var wrapper = editor.getWrapper();
+  wrapper.setStyle({
+    position: 'relative',
+    width: CANVAS_W + 'px',
+    height: CANVAS_H + 'px',
+    'background-color': '#FAF6ED',
+    overflow: 'hidden'
+  });
+
+  {% if is_edit and post and post.canvas_data %}
+  try {
+    editor.loadProjectData(JSON.parse({{ post.canvas_data|tojson }}));
+  } catch (e) { console.error('Failed to load canvas data', e); }
+  {% endif %}
+});
+
+document.getElementById('canvasSaveBtn').addEventListener('click', function() {
+  var form = document.getElementById('canvasPostForm');
+  form.canvas_html.value = editor.getHtml();
+  form.canvas_css.value = editor.getCss();
+  form.canvas_data.value = JSON.stringify(editor.getProjectData());
+  form.submit();
+});
+</script>
+
+{% include "footer.html" %}

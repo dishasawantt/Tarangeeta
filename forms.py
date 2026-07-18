@@ -2,7 +2,7 @@ import re
 from flask_wtf import FlaskForm
 from flask_wtf.file import FileField, FileAllowed
 from flask_ckeditor import CKEditorField
-from wtforms import StringField, SubmitField, PasswordField, SelectField, TextAreaField
+from wtforms import StringField, SubmitField, PasswordField, SelectField, TextAreaField, HiddenField
 from wtforms.validators import DataRequired, URL, Optional, Email, ValidationError
 
 ALLOWED_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'mp4', 'mov', 'avi', 'webm', 'mkv']
@@ -20,6 +20,18 @@ class CreatePostForm(FlaskForm):
     media_upload = FileField("Upload Media", validators=[FileAllowed(ALLOWED_EXTENSIONS)])
     body = CKEditorField("Blog Content", validators=[DataRequired()])
     submit = SubmitField("Submit Post")
+
+
+class CreateCanvasPostForm(FlaskForm):
+    title = StringField("Blog Post Title", validators=[DataRequired()])
+    subtitle = StringField("Subtitle", validators=[DataRequired()])
+    category = SelectField("Category", coerce=int, validators=[DataRequired()])
+    media_url = StringField("Media URL", validators=[Optional(), URL()])
+    media_upload = FileField("Upload Media", validators=[FileAllowed(ALLOWED_EXTENSIONS)])
+    canvas_data = HiddenField()
+    canvas_html = HiddenField()
+    canvas_css = HiddenField()
+    submit = SubmitField("Save Canvas Post")
 
 
 class RegisterForm(FlaskForm):

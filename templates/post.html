@@ -1,6 +1,19 @@
-{% set og_title = post.title %}
-{% set og_description = post.subtitle %}
-{% set og_image = post.media_url if post.media_type == 'image' else 'https://images.unsplash.com/photo-1478720568477-152d9b164e26?w=1200' %}
+{% set canonical_url = post.canonical_url or url_for('show_post', slug=post.slug, _external=True) %}
+{% set page_title = (post.meta_title or post.title) ~ ' | Tarangeeta' %}
+{% set og_title = post.meta_title or post.title %}
+{% set og_description = post.meta_description or post.excerpt or post.subtitle %}
+{% set og_image = post.og_image or (post.media_url if post.media_type == 'image' else 'https://images.unsplash.com/photo-1478720568477-152d9b164e26?w=1200') %}
+{% set og_type = 'article' %}
+{% if post.status == 'draft' %}{% set meta_robots = 'noindex' %}{% endif %}
+{% set structured_data = {
+  '@context': 'https://schema.org', '@type': 'BlogPosting',
+  'headline': post.title, 'description': og_description, 'image': og_image,
+  'author': {'@type': 'Person', 'name': post.author.name},
+  'publisher': {'@type': 'Organization', 'name': 'Tarangeeta'},
+  'datePublished': post.date, 'dateModified': post.updated_date or post.date,
+  'mainEntityOfPage': canonical_url,
+  'keywords': (post.tags | map(attribute='name') | join(', ')) if post.tags else ''
+} | tojson %}
 {% include "header.html" %}
 
 {% if post.media_type == 'video' %}
@@ -56,8 +69,34 @@
         </div>
         {% endif %}
 
-        <div class="post-content">{{ post.body|safe }}</div>
+        {% if toc and toc|length >= 2 %}
+        <nav class="post-toc" aria-label="Table of contents">
+          <p class="post-toc-title"><i class="fas fa-list-ul me-2"></i>In this post</p>
+          <ul>
+            {% for h in toc %}
+            <li class="toc-l{{ h.level }}"><a href="#{{ h.anchor }}">{{ h.text }}</a></li>
+            {% endfor %}
+          </ul>
+        </nav>
         {% endif %}
+
+        <div class="post-content">{{ post.body|safe }}</div>
+
+        {% if post.tags %}
+        <div class="post-tags">
+          {% for t in post.tags %}<a href="{{ url_for('posts_by_tag', slug=t.slug) }}" class="post-tag">#{{ t.name }}</a>{% endfor %}
+        </div>
+        {% endif %}
+        {% endif %}
+
+        <div class="post-share">
+          <span class="post-share-label">Share</span>
+          <a class="share-btn" href="https://twitter.com/intent/tweet?url={{ canonical_url|urlencode }}&amp;text={{ post.title|urlencode }}" target="_blank" rel="noopener" title="Share on X"><i class="fab fa-x-twitter"></i></a>
+          <a class="share-btn" href="https://www.facebook.com/sharer/sharer.php?u={{ canonical_url|urlencode }}" target="_blank" rel="noopener" title="Share on Facebook"><i class="fab fa-facebook-f"></i></a>
+          <a class="share-btn" href="https://www.linkedin.com/sharing/share-offsite/?url={{ canonical_url|urlencode }}" target="_blank" rel="noopener" title="Share on LinkedIn"><i class="fab fa-linkedin-in"></i></a>
+          <a class="share-btn" href="https://api.whatsapp.com/send?text={{ (post.title ~ ' ' ~ canonical_url)|urlencode }}" target="_blank" rel="noopener" title="Share on WhatsApp"><i class="fab fa-whatsapp"></i></a>
+          <button class="share-btn" id="copyLinkBtn" data-url="{{ canonical_url }}" title="Copy link"><i class="fas fa-link"></i></button>
+        </div>
 
         {% if current_user.is_authenticated and current_user.email == ADMIN_EMAIL %}
         <div class="d-flex justify-content-end mb-4 mt-4">
@@ -111,9 +150,40 @@
           {% endif %}
           {% endif %}
         </div>
+
+        {% if related %}
+        <aside class="related-posts">
+          <h4 class="related-title">You might also like</h4>
+          <div class="related-grid">
+            {% for r in related %}
+            <a class="related-card" href="{{ url_for('show_post', slug=r.slug) }}">
+              {% if r.category %}<span class="related-cat">{{ r.category.name }}</span>{% endif %}
+              <span class="related-name">{{ r.title }}</span>
+              <span class="related-sub">{{ r.excerpt or r.subtitle }}</span>
+            </a>
+            {% endfor %}
+          </div>
+        </aside>
+        {% endif %}
       </div>
     </div>
   </div>
 </article>
+
+<script nonce="{{ csp_nonce }}">
+(function () {
+  var btn = document.getElementById('copyLinkBtn');
+  if (!btn) return;
+  btn.addEventListener('click', function () {
+    var url = btn.dataset.url;
+    var done = function () {
+      var i = btn.querySelector('i'); var old = i.className;
+      i.className = 'fas fa-check'; setTimeout(function () { i.className = old; }, 1500);
+    };
+    if (navigator.clipboard) { navigator.clipboard.writeText(url).then(done).catch(function () { window.prompt('Copy this link:', url); }); }
+    else { window.prompt('Copy this link:', url); }
+  });
+})();
+</script>
 
 {% include "footer.html" %}

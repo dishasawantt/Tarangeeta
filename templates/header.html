@@ -5,17 +5,20 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
   <meta name="description" content="{{ og_description|default('तरंगीता - A space for reflection') }}" />
   <meta name="author" content="Disha" />
-  <title>तरंगीता | Tarangeeta</title>
-  <meta property="og:type" content="website" />
+  <title>{{ page_title|default('तरंगीता | Tarangeeta') }}</title>
+  {% if meta_robots %}<meta name="robots" content="{{ meta_robots }}" />{% endif %}
+  {% if canonical_url %}<link rel="canonical" href="{{ canonical_url }}" />{% endif %}
+  <meta property="og:type" content="{{ og_type|default('website') }}" />
   <meta property="og:site_name" content="Tarangeeta" />
   <meta property="og:title" content="{{ og_title|default('तरंगीता | Tarangeeta') }}" />
   <meta property="og:description" content="{{ og_description|default('तरंगीता - A space for reflection') }}" />
   <meta property="og:image" content="{{ og_image|default('https://res.cloudinary.com/dxxkklkqy/image/upload/v1767996799/favicon_x5lrfp.png') }}" />
-  <meta property="og:url" content="{{ request.url }}" />
+  <meta property="og:url" content="{{ canonical_url|default(request.url) }}" />
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="{{ og_title|default('तरंगीता | Tarangeeta') }}" />
   <meta name="twitter:description" content="{{ og_description|default('तरंगीता - A space for reflection') }}" />
   <meta name="twitter:image" content="{{ og_image|default('https://res.cloudinary.com/dxxkklkqy/image/upload/v1767996799/favicon_x5lrfp.png') }}" />
+  {% if structured_data %}<script type="application/ld+json">{{ structured_data|safe }}</script>{% endif %}
   {% block styles %}
   {{ bootstrap.load_css() }}
   <link rel="icon" type="image/png" href="https://res.cloudinary.com/dxxkklkqy/image/upload/v1767996799/favicon_x5lrfp.png" />
@@ -24,7 +27,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Lora:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Yatra+One&family=Dancing+Script:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <link href="{{ url_for('static', filename='css/styles.css') }}?v=33" rel="stylesheet" />
-  <link href="{{ url_for('static', filename='css/custom.css') }}?v=50" rel="stylesheet" />
+  <link href="{{ url_for('static', filename='css/custom.css') }}?v=51" rel="stylesheet" />
   <script nonce="{{ csp_nonce }}">document.documentElement.setAttribute('data-theme', localStorage.getItem('theme') || 'light');</script>
   {% endblock %}
 </head>

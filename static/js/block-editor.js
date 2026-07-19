@@ -539,8 +539,19 @@
     category: document.getElementById('beCategory'),
     coverUrl: document.getElementById('beCoverUrl'),
     coverFile: document.getElementById('beCoverFile'),
-    coverPrev: document.getElementById('beCoverPreview')
+    coverPrev: document.getElementById('beCoverPreview'),
+    slug: document.getElementById('beSlug'),
+    tags: document.getElementById('beTags'),
+    excerpt: document.getElementById('beExcerpt'),
+    metaTitle: document.getElementById('beMetaTitle'),
+    metaDesc: document.getElementById('beMetaDesc'),
+    ogImage: document.getElementById('beOgImage'),
+    canonical: document.getElementById('beCanonical'),
+    publishAt: document.getElementById('bePublishAt')
   };
+  function parseTags(v) {
+    return (v || '').split(',').map(function (t) { return t.trim(); }).filter(Boolean);
+  }
 
   function docHasContent(saved) {
     if (els.title.value.trim() || els.subtitle.value.trim() || els.coverUrl.value.trim()) return true;
@@ -584,6 +595,13 @@
         subtitle: els.subtitle.value.trim(),
         category_id: els.category.value ? parseInt(els.category.value, 10) : null,
         media_url: els.coverUrl.value.trim(),
+        slug: els.slug.value.trim(),
+        tags: parseTags(els.tags.value),
+        excerpt: els.excerpt.value.trim(),
+        meta_title: els.metaTitle.value.trim(),
+        meta_description: els.metaDesc.value.trim(),
+        og_image: els.ogImage.value.trim(),
+        canonical_url: els.canonical.value.trim(),
         content_json: saved
       };
       return fetch(CFG.autosaveUrl, {
@@ -602,6 +620,7 @@
           setStatus('saved', 'Saved');
           setText('beSavedAt', 'Last saved ' + j.saved_at);
           setText('beStatusDetail', (j.status === 'published' ? 'Published' : 'Draft'));
+          if (j.slug && !els.slug.value.trim()) els.slug.value = j.slug;  // show auto slug
           if (typeof j.word_count === 'number') { setText('beStatWords', j.word_count); setText('beStatRead', j.reading_time); }
           if (manual) toast('Draft saved');
           return j.id;
@@ -621,11 +640,17 @@
 
   function publish() {
     if (!els.title.value.trim()) { toast('Add a title before publishing'); els.title.focus(); return; }
-    setStatus('saving', 'Publishing…');
+    var when = els.publishAt.value;
+    if (when && new Date(when) > new Date()) {
+      if (!confirm('Schedule this post for ' + new Date(when).toLocaleString() + '?')) return;
+    }
+    setStatus('saving', when ? 'Scheduling…' : 'Publishing…');
     doSave(false).then(function (id) {
       if (!id) { toast('Add some content first'); setStatus('error', 'Nothing to publish'); return; }
       fetch('/api/posts/' + id + '/publish', {
-        method: 'POST', headers: { 'X-CSRFToken': CFG.csrf }
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CFG.csrf },
+        body: JSON.stringify({ publish_at: when || null })
       }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
         .then(function (res) {
           if (res.ok && res.j.redirect) { window.location.href = res.j.redirect; }
@@ -661,6 +686,9 @@
   els.title.addEventListener('input', function () { markDirty(); scheduleSave(); });
   els.subtitle.addEventListener('input', function () { markDirty(); scheduleSave(); });
   els.category.addEventListener('change', function () { markDirty(); scheduleSave(); });
+  [els.slug, els.tags, els.excerpt, els.metaTitle, els.metaDesc, els.ogImage, els.canonical].forEach(function (el) {
+    if (el) el.addEventListener('input', function () { markDirty(); scheduleSave(); });
+  });
 
   // Device preview
   [].forEach.call(document.querySelectorAll('.be-device-btn'), function (btn) {

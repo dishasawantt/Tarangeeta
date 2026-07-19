@@ -1,0 +1,110 @@
+{% include "header.html" %}
+
+<header class="masthead page-masthead" style="background-image: url('https://res.cloudinary.com/dxxkklkqy/image/upload/q_auto,f_auto/v1767996799/edit-bg_xmzwg9.jpg')">
+  <div class="container position-relative px-4 px-lg-5">
+    <div class="row gx-4 gx-lg-5 justify-content-center">
+      <div class="col-md-10 col-lg-8 col-xl-7">
+        <div class="page-heading">
+          <h1>Dashboard</h1>
+          <span class="subheading">Manage everything you've written</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main class="mb-5">
+  <div class="container px-4 px-lg-5" style="max-width: 1100px;">
+
+    <div class="dash-toolbar">
+      <div class="dash-tabs">
+        {% set tabs = [('all','All'),('published','Published'),('draft','Drafts'),('scheduled','Scheduled'),('archived','Archived')] %}
+        {% for key, label in tabs %}
+        <a href="{{ url_for('dashboard', status=key, q=q or None) }}" class="dash-tab {{ 'is-active' if status == key else '' }}">
+          {{ label }} <span class="dash-count">{{ counts[key] }}</span>
+        </a>
+        {% endfor %}
+      </div>
+      <form class="dash-search" method="GET" action="{{ url_for('dashboard') }}">
+        <input type="hidden" name="status" value="{{ status }}">
+        <input type="search" name="q" value="{{ q }}" placeholder="Search posts…" class="form-control form-control-sm">
+        <a class="btn btn-primary btn-sm" href="{{ url_for('add_new_post') }}"><i class="fas fa-pen me-1"></i>New</a>
+      </form>
+    </div>
+
+    {% if posts %}
+    <div class="dash-list">
+      {% for post in posts %}
+      <div class="dash-row" data-id="{{ post.id }}">
+        <div class="dash-main">
+          <div class="dash-title-line">
+            <span class="dash-status dash-status-{{ post.status or 'published' }}">{{ (post.status or 'published')|capitalize }}</span>
+            <a class="dash-title" href="{{ url_for('edit_post', post_id=post.id) if post.layout_type != 'canvas' else url_for('edit_post_canvas', post_id=post.id) }}">{{ post.title }}</a>
+            {% if post.layout_type == 'canvas' %}<span class="dash-chip"><i class="fas fa-object-group"></i> Canvas</span>{% endif %}
+          </div>
+          <div class="dash-meta">
+            {% if post.category %}<span>{{ post.category.name }}</span>{% endif %}
+            {% if post.reading_time %}<span>{{ post.reading_time }} min</span>{% endif %}
+            {% if post.status == 'scheduled' and post.published_at %}<span class="dash-sched"><i class="far fa-clock"></i> {{ post.published_at.strftime('%b %d, %Y %H:%M') }}</span>{% endif %}
+            <span>{{ post.updated_date or post.date }}</span>
+            {% if post.tags %}<span class="dash-tags">{% for t in post.tags %}<em>#{{ t.name }}</em>{% endfor %}</span>{% endif %}
+            <span class="dash-slug">/{{ post.slug }}</span>
+          </div>
+        </div>
+        <div class="dash-actions">
+          <a class="dash-btn" title="Edit" href="{{ url_for('edit_post', post_id=post.id) if post.layout_type != 'canvas' else url_for('edit_post_canvas', post_id=post.id) }}"><i class="fas fa-pen"></i></a>
+          <a class="dash-btn" title="Preview" href="{{ url_for('show_post', slug=post.slug) }}" target="_blank"><i class="fas fa-eye"></i></a>
+          {% if post.status in ('draft', 'scheduled', 'archived') %}
+          <button class="dash-btn dash-go" title="Publish now" data-act="status" data-status="published"><i class="fas fa-paper-plane"></i></button>
+          {% endif %}
+          {% if post.status == 'published' %}
+          <button class="dash-btn" title="Move to draft" data-act="status" data-status="draft"><i class="fas fa-rotate-left"></i></button>
+          <button class="dash-btn" title="Archive" data-act="status" data-status="archived"><i class="fas fa-box-archive"></i></button>
+          {% endif %}
+          <button class="dash-btn" title="Duplicate" data-act="duplicate"><i class="fas fa-copy"></i></button>
+          <button class="dash-btn dash-danger" title="Delete" data-act="delete"><i class="fas fa-trash-alt"></i></button>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="text-center py-5">
+      <i class="fas fa-feather-alt fa-3x mb-3" style="color: var(--soft-teal);"></i>
+      <p class="lead text-muted">Nothing here{% if q %} for “{{ q }}”{% endif %}.</p>
+      <a href="{{ url_for('add_new_post') }}" class="btn btn-primary">Write a new post</a>
+    </div>
+    {% endif %}
+  </div>
+</main>
+
+<script nonce="{{ csp_nonce }}">
+(function () {
+  var CSRF = "{{ csrf_token() }}";
+  function post(url, body) {
+    return fetch(url, {
+      method: 'POST',
+      headers: Object.assign({ 'X-CSRFToken': CSRF }, body ? { 'Content-Type': 'application/json' } : {}),
+      body: body ? JSON.stringify(body) : undefined
+    });
+  }
+  document.querySelectorAll('.dash-actions').forEach(function (group) {
+    var row = group.closest('.dash-row');
+    var id = row.dataset.id;
+    group.querySelectorAll('[data-act]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var act = btn.dataset.act;
+        if (act === 'status') {
+          post('/api/posts/' + id + '/status', { status: btn.dataset.status }).then(function () { location.reload(); });
+        } else if (act === 'duplicate') {
+          post('/api/posts/' + id + '/duplicate').then(function () { location.reload(); });
+        } else if (act === 'delete') {
+          if (!confirm('Delete this post permanently?')) return;
+          post('/delete/' + id).then(function () { location.reload(); });
+        }
+      });
+    });
+  });
+})();
+</script>
+
+{% include "footer.html" %}

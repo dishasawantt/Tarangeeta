@@ -32,14 +32,14 @@
       <div class="d-flex flex-wrap gap-2 justify-content-center mb-4">
         <a class="btn btn-primary btn-lg" href="{{ url_for('add_new_post') }}"><i class="fas fa-pen me-2"></i>New Post</a>
         <a class="btn btn-outline-secondary btn-lg" href="{{ url_for('add_new_canvas_post') }}"><i class="fas fa-object-group me-2"></i>New Canvas Post</a>
-        <a class="btn btn-outline-secondary btn-lg" href="{{ url_for('list_drafts') }}"><i class="fas fa-file-lines me-2"></i>Drafts</a>
+        <a class="btn btn-outline-secondary btn-lg" href="{{ url_for('dashboard') }}"><i class="fas fa-table-columns me-2"></i>Dashboard</a>
       </div>
       {% endif %}
 
       <div class="posts-grid">
         {% for post in all_posts %}
         <div class="post-card">
-          <a href="{{ url_for('show_post', post_id=post.id) }}" class="post-card-link">
+          <a href="{{ url_for('show_post', slug=post.slug) }}" class="post-card-link">
             {% if post.category %}<span class="post-category">{{ post.category.name }}</span>{% endif %}
             <h2 class="post-card-title">{{ post.title }}</h2>
             <p class="post-card-subtitle">{{ post.subtitle }}</p>

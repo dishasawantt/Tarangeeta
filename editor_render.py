@@ -271,6 +271,37 @@ def estimate_reading_time(content_json, wpm=200):
     return minutes, words
 
 
+def extract_toc(content_json):
+    """Return [{level, text, anchor}] for header blocks — powers the table of
+    contents. Anchors match the ids emitted by render_blocks_to_html."""
+    doc = _loads(content_json)
+    blocks = doc.get("blocks", []) if isinstance(doc, dict) else []
+    used, toc = set(), []
+    for b in blocks:
+        if b.get("type") != "header":
+            continue
+        raw = b.get("data", {}).get("text", "")
+        text = re.sub(r"<[^>]+>", "", raw).strip()
+        if not text:
+            continue
+        level = b.get("data", {}).get("level", 2)
+        toc.append({"level": level if level in (2, 3, 4) else 2,
+                    "text": text, "anchor": _slugify(raw, used)})
+    return toc
+
+
+def make_excerpt(content_json, limit=160):
+    """First meaningful paragraph text, trimmed — used as a fallback excerpt."""
+    doc = _loads(content_json)
+    blocks = doc.get("blocks", []) if isinstance(doc, dict) else []
+    for b in blocks:
+        if b.get("type") in ("paragraph", "quote"):
+            text = re.sub(r"<[^>]+>", "", b.get("data", {}).get("text", "")).strip()
+            if text:
+                return (text[:limit].rsplit(" ", 1)[0] + "…") if len(text) > limit else text
+    return ""
+
+
 # --- Legacy CKEditor HTML -> blocks (best effort) --------------------------
 _BLOCK_INLINE_KEEP = {"b", "strong", "i", "em", "u", "s", "strike", "del",
                       "mark", "a", "code", "sup", "sub", "span", "br"}

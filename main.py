@@ -1,4 +1,5 @@
 import os
+import re
 import json
 import hashlib
 import smtplib
@@ -6,7 +7,7 @@ import secrets
 from xml.sax.saxutils import escape
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from datetime import date
+from datetime import date, datetime, timezone
 from functools import wraps
 
 from dotenv import load_dotenv
@@ -17,7 +18,7 @@ from flask_login import UserMixin, login_user, LoginManager, current_user, logou
 from flask_sqlalchemy import SQLAlchemy
 from flask_dance.contrib.google import make_google_blueprint, google
 from flask_wtf.csrf import CSRFProtect
-from sqlalchemy import Integer, String, Text, ForeignKey
+from sqlalchemy import Integer, String, Text, ForeignKey, DateTime, Table, Column
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy.exc import IntegrityError
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -26,7 +27,7 @@ import cloudinary
 import cloudinary.uploader
 
 from forms import CreatePostForm, CreateCanvasPostForm, RegisterForm, LoginForm, CommentForm, SearchForm, ContactForm
-from editor_render import render_blocks_to_html, html_to_blocks, estimate_reading_time
+from editor_render import render_blocks_to_html, html_to_blocks, estimate_reading_time, extract_toc, make_excerpt
 
 load_dotenv()
 
@@ -128,6 +129,12 @@ VIDEO_EXTENSIONS = {'mp4', 'mov', 'avi', 'webm', 'mkv', 'ogg', 'ogv'}
 DEFAULT_COVER = 'https://images.unsplash.com/photo-1478720568477-152d9b164e26?w=1200'
 
 
+def utcnow():
+    """Naive UTC now — keeps scheduling comparisons consistent (published_at is
+    stored naive) without the deprecated utcnow()."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
 class Base(DeclarativeBase):
     pass
 
@@ -141,6 +148,21 @@ class Category(db.Model):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
     posts = relationship("BlogPost", back_populates="category")
+
+
+post_tags = Table(
+    "post_tags", Base.metadata,
+    Column("post_id", ForeignKey("blog_posts.id"), primary_key=True),
+    Column("tag_id", ForeignKey("tags.id"), primary_key=True),
+)
+
+
+class Tag(db.Model):
+    __tablename__ = "tags"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(60), unique=True, nullable=False)
+    slug: Mapped[str] = mapped_column(String(80), unique=True, nullable=False)
+    posts = relationship("BlogPost", secondary=post_tags, back_populates="tags")
 
 
 class BlogPost(db.Model):
@@ -166,6 +188,15 @@ class BlogPost(db.Model):
     status: Mapped[str] = mapped_column(String(20), nullable=False, default='published')
     reading_time: Mapped[int] = mapped_column(Integer, nullable=True)
     updated_date: Mapped[str] = mapped_column(String(250), nullable=True)
+    # Phase 2 — management, SEO, scheduling
+    slug: Mapped[str] = mapped_column(String(250), unique=True, nullable=True)
+    excerpt: Mapped[str] = mapped_column(Text, nullable=True)
+    meta_title: Mapped[str] = mapped_column(String(250), nullable=True)
+    meta_description: Mapped[str] = mapped_column(String(320), nullable=True)
+    og_image: Mapped[str] = mapped_column(String(500), nullable=True)
+    canonical_url: Mapped[str] = mapped_column(String(500), nullable=True)
+    published_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
+    tags = relationship("Tag", secondary=post_tags, back_populates="posts")
     comments = relationship("Comment", back_populates="parent_post", cascade="all, delete-orphan")
 
 
@@ -294,6 +325,26 @@ def init_categories():
     db.session.commit()
 
 
+def slugify(text):
+    text = re.sub(r'<[^>]+>', '', text or '')
+    text = re.sub(r'[^\w\s-]', '', text).strip().lower()
+    text = re.sub(r'[\s_-]+', '-', text)
+    return text.strip('-') or 'post'
+
+
+def unique_slug(text, exclude_id=None):
+    base = slugify(text)[:230]
+    candidate, n = base, 2
+    while True:
+        q = db.select(BlogPost.id).where(BlogPost.slug == candidate)
+        if exclude_id:
+            q = q.where(BlogPost.id != exclude_id)
+        if not db.session.execute(q).scalar():
+            return candidate
+        candidate = f"{base}-{n}"
+        n += 1
+
+
 def run_startup_migrations():
     """db.create_all() only adds new tables, not new columns on existing ones."""
     inspector = db.inspect(db.engine)
@@ -307,11 +358,26 @@ def run_startup_migrations():
         'status': "VARCHAR(20) DEFAULT 'published'",
         'reading_time': "INTEGER",
         'updated_date': "VARCHAR(250)",
+        'slug': "VARCHAR(250)",
+        'excerpt': "TEXT",
+        'meta_title': "VARCHAR(250)",
+        'meta_description': "VARCHAR(320)",
+        'og_image': "VARCHAR(500)",
+        'canonical_url': "VARCHAR(500)",
+        'published_at': "TIMESTAMP",
     }
     for name, sql_type in new_columns.items():
         if name not in existing_columns:
             db.session.execute(db.text(f"ALTER TABLE blog_posts ADD COLUMN {name} {sql_type}"))
     db.session.commit()
+    # Backfill slugs for any posts created before slugs existed.
+    missing = db.session.execute(
+        db.select(BlogPost).where(db.or_(BlogPost.slug.is_(None), BlogPost.slug == ''))
+    ).scalars().all()
+    for post in missing:
+        post.slug = unique_slug(post.title, exclude_id=post.id)
+    if missing:
+        db.session.commit()
 
 
 with app.app_context():
@@ -419,15 +485,35 @@ def google_callback():
 
 
 def visible_posts():
-    """Base query for publicly-visible posts (published; NULL treated as published
-    for rows that predate the status column)."""
+    """Base query for publicly-visible posts: published, legacy NULL-status, or
+    scheduled posts whose time has arrived (publish-on-read — no worker needed)."""
     return db.select(BlogPost).where(
-        db.or_(BlogPost.status == 'published', BlogPost.status.is_(None))
+        db.or_(
+            BlogPost.status == 'published',
+            BlogPost.status.is_(None),
+            db.and_(BlogPost.status == 'scheduled', BlogPost.published_at <= utcnow()),
+        )
     )
+
+
+def promote_due_scheduled():
+    """Flip scheduled posts whose publish time has passed to 'published'."""
+    due = db.session.execute(
+        db.select(BlogPost).where(BlogPost.status == 'scheduled',
+                                  BlogPost.published_at.isnot(None),
+                                  BlogPost.published_at <= utcnow())
+    ).scalars().all()
+    for p in due:
+        p.status = 'published'
+        if not p.date:
+            p.date = (p.published_at or utcnow()).strftime("%B %d, %Y")
+    if due:
+        db.session.commit()
 
 
 @app.route('/')
 def get_all_posts():
+    promote_due_scheduled()
     page = request.args.get('page', 1, type=int)
     category_id = request.args.get('category', type=int)
     query = visible_posts().order_by(BlogPost.id.desc())
@@ -439,11 +525,31 @@ def get_all_posts():
                            pagination=pagination, categories=categories, selected_category=category_id)
 
 
-@app.route("/post/<int:post_id>", methods=["GET", "POST"])
-def show_post(post_id):
+def _is_admin():
+    return current_user.is_authenticated and current_user.email == ADMIN_EMAIL
+
+
+def _post_is_public(post):
+    if post.status in (None, 'published'):
+        return True
+    if post.status == 'scheduled' and post.published_at and post.published_at <= utcnow():
+        return True
+    return False
+
+
+@app.route("/post/<int:post_id>")
+def post_by_id(post_id):
+    """Legacy numeric URLs redirect to the canonical slug URL."""
     post = db.get_or_404(BlogPost, post_id)
-    is_admin = current_user.is_authenticated and current_user.email == ADMIN_EMAIL
-    if post.status == 'draft' and not is_admin:
+    return redirect(url_for('show_post', slug=post.slug or str(post.id)), code=301)
+
+
+@app.route("/post/<slug>", methods=["GET", "POST"])
+def show_post(slug):
+    post = db.session.execute(db.select(BlogPost).where(BlogPost.slug == slug)).scalar()
+    if not post:
+        abort(404)
+    if not _post_is_public(post) and not _is_admin():
         abort(404)
     form = CommentForm()
     if form.validate_on_submit():
@@ -452,10 +558,43 @@ def show_post(post_id):
             return redirect(url_for("login"))
         if not current_user.email_verified and current_user.email != ADMIN_EMAIL:
             flash("Please verify your email to comment.")
-            return redirect(url_for("show_post", post_id=post_id))
+            return redirect(url_for("show_post", slug=post.slug))
         db.session.add(Comment(text=form.comment_text.data, comment_author=current_user, parent_post=post))
         db.session.commit()
-    return render_template("post.html", post=post, current_user=current_user, form=form)
+        return redirect(url_for("show_post", slug=post.slug))
+    toc = extract_toc(post.content_json) if post.content_json else []
+    related = related_posts(post)
+    return render_template("post.html", post=post, current_user=current_user, form=form,
+                           toc=toc, related=related)
+
+
+def related_posts(post, limit=3):
+    """Up to `limit` other public posts sharing a tag or category, newest first."""
+    tag_ids = [t.id for t in post.tags]
+    q = visible_posts().where(BlogPost.id != post.id)
+    conds = []
+    if tag_ids:
+        conds.append(BlogPost.tags.any(Tag.id.in_(tag_ids)))
+    if post.category_id:
+        conds.append(BlogPost.category_id == post.category_id)
+    if conds:
+        q = q.where(db.or_(*conds))
+    else:
+        return []
+    return db.session.execute(q.order_by(BlogPost.id.desc()).limit(limit)).scalars().all()
+
+
+@app.route("/tag/<slug>")
+def posts_by_tag(slug):
+    promote_due_scheduled()
+    tag = db.session.execute(db.select(Tag).where(Tag.slug == slug)).scalar()
+    if not tag:
+        abort(404)
+    page = request.args.get('page', 1, type=int)
+    query = visible_posts().where(BlogPost.tags.any(Tag.id == tag.id)).order_by(BlogPost.id.desc())
+    pagination = db.paginate(query, page=page, per_page=POSTS_PER_PAGE, error_out=False)
+    return render_template("tag.html", tag=tag, all_posts=pagination.items,
+                           pagination=pagination, current_user=current_user)
 
 
 @app.route("/post/<int:post_id>/canvas-frame")
@@ -507,6 +646,42 @@ def unique_post_title(title, exclude_id=None):
         n += 1
 
 
+def unique_tag_slug(name):
+    base = slugify(name)[:70]
+    candidate, n = base, 2
+    while db.session.execute(db.select(Tag.id).where(Tag.slug == candidate)).scalar():
+        candidate = f"{base}-{n}"
+        n += 1
+    return candidate
+
+
+def resolve_tags(names):
+    """Get-or-create Tag rows for a list of names; de-duplicated, case-insensitive."""
+    tags, seen = [], set()
+    for raw in (names or []):
+        name = (raw or "").strip()[:60]
+        key = name.lower()
+        if not name or key in seen:
+            continue
+        seen.add(key)
+        tag = db.session.execute(db.select(Tag).where(db.func.lower(Tag.name) == key)).scalar()
+        if not tag:
+            tag = Tag(name=name, slug=unique_tag_slug(name))
+            db.session.add(tag)
+        tags.append(tag)
+    return tags
+
+
+def parse_dt(s):
+    """Parse a datetime-local string ('YYYY-MM-DDTHH:MM') as naive local time."""
+    if not s:
+        return None
+    try:
+        return datetime.fromisoformat(s)
+    except (ValueError, TypeError):
+        return None
+
+
 def _content_doc(post):
     """Editor.js document to load into the editor (or None for a blank post)."""
     if post is None:
@@ -527,7 +702,7 @@ def add_new_post():
     categories = db.session.execute(db.select(Category)).scalars().all()
     return render_template("edit-post-block.html", post=None, is_edit=False,
                            categories=categories, content_doc=None, cover_url='',
-                           current_user=current_user)
+                           tags_str='', current_user=current_user)
 
 
 @app.route("/edit-post/<int:post_id>")
@@ -538,9 +713,10 @@ def edit_post(post_id):
         return redirect(url_for('edit_post_canvas', post_id=post.id))
     categories = db.session.execute(db.select(Category)).scalars().all()
     cover_url = post.media_url if post.media_url and post.media_url != DEFAULT_COVER else ''
+    tags_str = ', '.join(t.name for t in post.tags)
     return render_template("edit-post-block.html", post=post, is_edit=True,
                            categories=categories, content_doc=_content_doc(post),
-                           cover_url=cover_url, current_user=current_user)
+                           cover_url=cover_url, tags_str=tags_str, current_user=current_user)
 
 
 @app.route("/api/posts/autosave", methods=["POST"])
@@ -552,44 +728,51 @@ def autosave_post():
     body_html = render_blocks_to_html(content_str)
     minutes, words = estimate_reading_time(content_str)
     media_url = (payload.get('media_url') or '').strip()
-    media_type = get_media_type(media_url) if media_url else 'image'
-    category_id = payload.get('category_id') or None
-    subtitle = (payload.get('subtitle') or '').strip()
     now = date.today().strftime("%B %d, %Y")
     post_id = payload.get('id')
 
     post = db.session.get(BlogPost, post_id) if post_id else None
     if post_id and not post:
         return jsonify(error='not found'), 404
-
     if post is None:
-        # Set every NOT NULL column at construction: the unique_post_title()
-        # SELECT below would otherwise autoflush a half-built row.
-        post = BlogPost(
-            author=current_user, date=now, status='draft', layout_type='article',
-            title=unique_post_title(payload.get('title')), subtitle=subtitle,
-            body=body_html, content_json=content_str,
-            media_url=media_url or DEFAULT_COVER, media_type=media_type,
-            category_id=category_id, reading_time=minutes, updated_date=now,
-        )
+        # NOT NULL columns set up front + a unique title so the flush (needed to
+        # get an id before the slug query) can't fail.
+        post = BlogPost(author=current_user, date=now, status='draft', layout_type='article',
+                        title=unique_post_title(payload.get('title')), subtitle='',
+                        body=body_html, media_url=media_url or DEFAULT_COVER, media_type='image')
         db.session.add(post)
-    else:
-        post.title = unique_post_title(payload.get('title'), exclude_id=post.id)
-        post.subtitle = subtitle
-        post.category_id = category_id
-        if media_url:
-            post.media_url, post.media_type = media_url, media_type
-        post.body = body_html
-        post.content_json = content_str
-        post.reading_time = minutes
-        post.updated_date = now
+        db.session.flush()
+
+    post.title = unique_post_title(payload.get('title'), exclude_id=post.id)
+    post.subtitle = (payload.get('subtitle') or '').strip()
+    post.category_id = payload.get('category_id') or None
+    if media_url:
+        post.media_url, post.media_type = media_url, get_media_type(media_url)
+    post.body = body_html
+    post.content_json = content_str
+    post.reading_time = minutes
+    post.updated_date = now
+
+    desired_slug = (payload.get('slug') or '').strip()
+    if desired_slug:
+        post.slug = unique_slug(desired_slug, exclude_id=post.id)
+    elif not post.slug:
+        post.slug = unique_slug(post.title, exclude_id=post.id)
+
+    post.excerpt = (payload.get('excerpt') or '').strip() or None
+    post.meta_title = (payload.get('meta_title') or '').strip() or None
+    post.meta_description = (payload.get('meta_description') or '').strip() or None
+    post.og_image = (payload.get('og_image') or '').strip() or None
+    post.canonical_url = (payload.get('canonical_url') or '').strip() or None
+    if 'tags' in payload:
+        post.tags = resolve_tags(payload.get('tags'))
 
     try:
         db.session.commit()
     except IntegrityError:
         db.session.rollback()
         return jsonify(error='save failed'), 500
-    return jsonify(id=post.id, status=post.status, title=post.title,
+    return jsonify(id=post.id, status=post.status, title=post.title, slug=post.slug,
                    saved_at=now, reading_time=minutes, word_count=words)
 
 
@@ -597,15 +780,28 @@ def autosave_post():
 @admin_only
 def publish_post(post_id):
     post = db.get_or_404(BlogPost, post_id)
+    payload = request.get_json(silent=True) or {}
     if post.content_json:
         post.body = render_blocks_to_html(post.content_json)
         post.reading_time, _ = estimate_reading_time(post.content_json)
     if not (post.body or '').strip():
         return jsonify(error='Add some content before publishing.'), 400
-    post.status = 'published'
+    if not post.slug:
+        post.slug = unique_slug(post.title, exclude_id=post.id)
     post.updated_date = date.today().strftime("%B %d, %Y")
+
+    scheduled_for = parse_dt(payload.get('publish_at'))
+    if scheduled_for and scheduled_for > utcnow():
+        post.status = 'scheduled'
+        post.published_at = scheduled_for
+        db.session.commit()
+        return jsonify(status='scheduled', redirect=url_for('dashboard'))
+
+    post.status = 'published'
+    if not post.published_at:
+        post.published_at = utcnow()
     db.session.commit()
-    return jsonify(redirect=url_for('show_post', post_id=post.id))
+    return jsonify(status='published', redirect=url_for('show_post', slug=post.slug))
 
 
 @app.route("/api/editor/upload-image", methods=["POST"])
@@ -629,13 +825,68 @@ def editor_fetch_image():
     return jsonify(success=1, file={"url": url})
 
 
+DASHBOARD_STATUSES = ('published', 'draft', 'scheduled', 'archived')
+
+
+@app.route("/dashboard")
+@admin_only
+def dashboard():
+    promote_due_scheduled()
+    status = request.args.get('status', 'all')
+    q = (request.args.get('q') or '').strip()
+    query = db.select(BlogPost)
+    if status in DASHBOARD_STATUSES:
+        query = query.where(BlogPost.status == status)
+    if q:
+        query = query.where(db.or_(BlogPost.title.ilike(f'%{q}%'), BlogPost.subtitle.ilike(f'%{q}%')))
+    posts = db.session.execute(query.order_by(BlogPost.id.desc())).scalars().all()
+    counts = {s: db.session.execute(
+        db.select(db.func.count(BlogPost.id)).where(BlogPost.status == s)).scalar()
+        for s in DASHBOARD_STATUSES}
+    counts['all'] = db.session.execute(db.select(db.func.count(BlogPost.id))).scalar()
+    return render_template("dashboard.html", posts=posts, status=status, q=q,
+                           counts=counts, now=utcnow(), current_user=current_user)
+
+
 @app.route("/drafts")
 @admin_only
 def list_drafts():
-    drafts = db.session.execute(
-        db.select(BlogPost).where(BlogPost.status == 'draft').order_by(BlogPost.id.desc())
-    ).scalars().all()
-    return render_template("drafts.html", drafts=drafts, current_user=current_user)
+    return redirect(url_for('dashboard', status='draft'))
+
+
+@app.route("/api/posts/<int:post_id>/duplicate", methods=["POST"])
+@admin_only
+def duplicate_post(post_id):
+    src = db.get_or_404(BlogPost, post_id)
+    copy = BlogPost(
+        author=current_user, date=date.today().strftime("%B %d, %Y"), status='draft',
+        layout_type=src.layout_type, title=unique_post_title(f"{src.title} (copy)"),
+        subtitle=src.subtitle, body=src.body, content_json=src.content_json,
+        media_url=src.media_url, media_type=src.media_type, category_id=src.category_id,
+        reading_time=src.reading_time, excerpt=src.excerpt, meta_title=src.meta_title,
+        meta_description=src.meta_description, og_image=src.og_image,
+        canvas_data=src.canvas_data, canvas_html=src.canvas_html, canvas_css=src.canvas_css,
+    )
+    db.session.add(copy)
+    db.session.flush()
+    copy.slug = unique_slug(copy.title, exclude_id=copy.id)
+    copy.tags = list(src.tags)
+    db.session.commit()
+    return jsonify(id=copy.id, redirect=url_for('dashboard'))
+
+
+@app.route("/api/posts/<int:post_id>/status", methods=["POST"])
+@admin_only
+def set_post_status(post_id):
+    post = db.get_or_404(BlogPost, post_id)
+    new_status = (request.get_json(silent=True) or {}).get('status')
+    if new_status not in ('published', 'draft', 'archived'):
+        return jsonify(error='bad status'), 400
+    post.status = new_status
+    if new_status == 'published' and not post.published_at:
+        post.published_at = utcnow()
+    db.session.commit()
+    return jsonify(status=post.status, slug=post.slug)
 
 
 @app.route("/new-post-canvas", methods=["GET", "POST"])
@@ -657,11 +908,13 @@ def add_new_canvas_post():
         if not form.canvas_html.data:
             flash("Please add some content to the canvas before saving.")
             return render_template("make-canvas-post.html", form=form, current_user=current_user)
+        title = unique_post_title(form.title.data)
         db.session.add(BlogPost(
-            title=form.title.data, subtitle=form.subtitle.data, body='',
+            title=title, subtitle=form.subtitle.data, body='',
             media_url=media_url, media_type=media_type, author=current_user,
             category_id=form.category.data, date=date.today().strftime("%B %d, %Y"),
-            layout_type='canvas', canvas_data=form.canvas_data.data,
+            layout_type='canvas', slug=unique_slug(title), published_at=utcnow(),
+            canvas_data=form.canvas_data.data,
             canvas_html=form.canvas_html.data, canvas_css=form.canvas_css.data
         ))
         db.session.commit()
@@ -689,8 +942,10 @@ def edit_post_canvas(post_id):
         post.category_id = form.category.data
         if form.canvas_html.data:
             post.canvas_data, post.canvas_html, post.canvas_css = form.canvas_data.data, form.canvas_html.data, form.canvas_css.data
+        if not post.slug:
+            post.slug = unique_slug(post.title, exclude_id=post.id)
         db.session.commit()
-        return redirect(url_for("show_post", post_id=post.id))
+        return redirect(url_for("show_post", slug=post.slug))
     return render_template("make-canvas-post.html", form=form, is_edit=True, current_user=current_user, post=post)
 
 
@@ -764,8 +1019,10 @@ def robots_txt():
 @app.route("/sitemap.xml")
 def sitemap_xml():
     posts = db.session.execute(visible_posts()).scalars().all()
+    tags = db.session.execute(db.select(Tag)).scalars().all()
     urls = [request.host_url, request.host_url + "about", request.host_url + "contact"]
-    urls += [f"{request.host_url}post/{post.id}" for post in posts]
+    urls += [f"{request.host_url}post/{post.slug or post.id}" for post in posts]
+    urls += [f"{request.host_url}tag/{tag.slug}" for tag in tags]
     body = ['<?xml version="1.0" encoding="UTF-8"?>', '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">']
     for url in urls:
         body.append(f"<url><loc>{escape(url)}</loc></url>")

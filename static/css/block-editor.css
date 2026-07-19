@@ -116,6 +116,19 @@ body.be-editing kbd {
 .be-saved-at { font-size: .76rem; color: var(--soft-gray); margin-top: 2px; }
 .be-shortcuts { font-size: .74rem; color: var(--soft-gray); line-height: 1.9; margin-top: 8px; }
 .be-shortcuts strong { color: var(--soft-teal); font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; }
+textarea.be-input { resize: vertical; font-family: inherit; }
+
+/* Slug field + collapsible SEO/Schedule groups */
+.be-slug-wrap { display: flex; align-items: center; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--card-bg); }
+.be-slug-wrap:focus-within { border-color: var(--coral); }
+.be-slug-prefix { padding: 8px 4px 8px 10px; font-size: .8rem; color: var(--soft-gray); font-family: ui-monospace, monospace; white-space: nowrap; }
+.be-slug-wrap .be-input { border: none; padding-left: 2px; }
+.be-slug-wrap .be-input:focus { outline: none; }
+.be-details { margin-bottom: 16px; border: 1px solid var(--line); border-radius: 10px; padding: 0 12px; background: var(--card-bg); }
+.be-details > summary { cursor: pointer; padding: 10px 2px; font-size: .74rem; color: var(--soft-teal); list-style: none; text-transform: uppercase; letter-spacing: .05em; }
+.be-details > summary::-webkit-details-marker { display: none; }
+.be-details[open] > summary { border-bottom: 1px solid var(--line); margin-bottom: 10px; color: var(--coral); }
+.be-details .be-field:last-child { margin-bottom: 12px; }
 
 /* ---------- Canvas ---------- */
 .be-canvas { flex: 1 1 auto; overflow-y: auto; padding: 36px 24px 120px; }

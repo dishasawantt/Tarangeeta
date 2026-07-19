@@ -1,0 +1,62 @@
+{% set page_title = '#' ~ tag.name ~ ' | Tarangeeta' %}
+{% set og_title = 'Posts tagged “' ~ tag.name ~ '”' %}
+{% include "header.html" %}
+
+<header class="masthead page-masthead" style="background-image: url('https://res.cloudinary.com/dxxkklkqy/image/upload/q_auto,f_auto/v1767996799/edit-bg_xmzwg9.jpg')">
+  <div class="container position-relative px-4 px-lg-5">
+    <div class="row gx-4 gx-lg-5 justify-content-center">
+      <div class="col-md-10 col-lg-8 col-xl-7">
+        <div class="page-heading">
+          <h1>#{{ tag.name }}</h1>
+          <span class="subheading">{{ pagination.total }} post{{ 's' if pagination.total != 1 else '' }} tagged “{{ tag.name }}”</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<div class="container-fluid px-4 px-lg-5 py-5" style="max-width: 1200px;">
+  <div class="row justify-content-center">
+    <div class="col-12">
+      <div class="mb-4 text-center">
+        <a href="{{ url_for('get_all_posts') }}" class="btn btn-sm btn-outline-secondary"><i class="fas fa-arrow-left me-1"></i> All posts</a>
+      </div>
+
+      <div class="posts-grid">
+        {% for post in all_posts %}
+        <div class="post-card">
+          <a href="{{ url_for('show_post', slug=post.slug) }}" class="post-card-link">
+            {% if post.category %}<span class="post-category">{{ post.category.name }}</span>{% endif %}
+            <h2 class="post-card-title">{{ post.title }}</h2>
+            <p class="post-card-subtitle">{{ post.excerpt or post.subtitle }}</p>
+            <div class="post-card-meta"><span>{{ post.author.name }}</span><span>·</span><span>{{ post.date }}</span></div>
+          </a>
+        </div>
+        {% endfor %}
+      </div>
+
+      {% if not all_posts %}
+      <div class="text-center py-5">
+        <i class="fas fa-feather-alt fa-3x mb-3" style="color: var(--soft-teal);"></i>
+        <p class="lead" style="color: var(--soft-gray);">No posts with this tag yet.</p>
+      </div>
+      {% endif %}
+
+      {% if pagination and pagination.pages > 1 %}
+      <nav aria-label="Page navigation" class="mt-5">
+        <ul class="pagination justify-content-center">
+          {% if pagination.has_prev %}
+          <li class="page-item"><a class="page-link" href="{{ url_for('posts_by_tag', slug=tag.slug, page=pagination.prev_num) }}"><i class="fas fa-arrow-left me-1"></i> Newer</a></li>
+          {% endif %}
+          <li class="page-item disabled"><span class="page-link">{{ pagination.page }} / {{ pagination.pages }}</span></li>
+          {% if pagination.has_next %}
+          <li class="page-item"><a class="page-link" href="{{ url_for('posts_by_tag', slug=tag.slug, page=pagination.next_num) }}">Older <i class="fas fa-arrow-right ms-1"></i></a></li>
+          {% endif %}
+        </ul>
+      </nav>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+{% include "footer.html" %}

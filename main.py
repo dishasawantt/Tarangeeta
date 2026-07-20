@@ -125,6 +125,7 @@ app.register_blueprint(google_bp, url_prefix="/login")
 ADMIN_EMAIL = os.environ.get('ADMIN_EMAIL', 'dishasawantt@gmail.com')
 POSTS_PER_PAGE = 6
 VIDEO_EXTENSIONS = {'mp4', 'mov', 'avi', 'webm', 'mkv', 'ogg', 'ogv'}
+AUDIO_EXTENSIONS = {'mp3', 'm4a', 'wav', 'aac', 'flac', 'opus', 'oga', 'weba'}
 # Neutral placeholder cover for brand-new drafts that don't have one yet.
 DEFAULT_COVER = 'https://images.unsplash.com/photo-1478720568477-152d9b164e26?w=1200'
 
@@ -199,6 +200,8 @@ class BlogPost(db.Model):
     # Phase 3 — page design
     content_width: Mapped[str] = mapped_column(String(20), nullable=True)
     page_bg: Mapped[str] = mapped_column(String(300), nullable=True)
+    # Optional audio narration (author reading the post aloud)
+    narration_url: Mapped[str] = mapped_column(String(500), nullable=True)
     tags = relationship("Tag", secondary=post_tags, back_populates="posts")
     comments = relationship("Comment", back_populates="parent_post", cascade="all, delete-orphan")
 
@@ -384,6 +387,7 @@ def run_startup_migrations():
         'published_at': "TIMESTAMP",
         'content_width': "VARCHAR(20)",
         'page_bg': "VARCHAR(300)",
+        'narration_url': "VARCHAR(500)",
     }
     for name, sql_type in new_columns.items():
         if name not in existing_columns:
@@ -787,6 +791,7 @@ def autosave_post():
     post.content_width = cw if cw in ('narrow', 'normal', 'wide', 'full') else None
     # page_bg accepts colors/gradients only — strip chars that could inject extra CSS
     post.page_bg = (re.sub(r'[^#a-zA-Z0-9,.%()\s-]', '', payload.get('page_bg') or '').strip()[:300]) or None
+    post.narration_url = (payload.get('narration_url') or '').strip() or None
     if 'tags' in payload:
         post.tags = resolve_tags(payload.get('tags'))
 
@@ -846,6 +851,23 @@ def editor_fetch_image():
     if not url:
         return jsonify(success=0, message="No URL provided.")
     return jsonify(success=1, file={"url": url})
+
+
+@app.route("/api/editor/upload-audio", methods=["POST"])
+@admin_only
+def editor_upload_audio():
+    f = request.files.get('audio')
+    ext = f.filename.rsplit('.', 1)[-1].lower() if f and '.' in f.filename else ''
+    if not f or ext not in AUDIO_EXTENSIONS:
+        return jsonify(success=0, message="Please choose an audio file (mp3, m4a, wav…).")
+    if not os.environ.get('CLOUDINARY_CLOUD_NAME'):
+        return jsonify(success=0, message="Upload failed. Check Cloudinary configuration.")
+    try:
+        # Cloudinary stores audio under the 'video' resource type.
+        result = cloudinary.uploader.upload(f, resource_type='video')
+        return jsonify(success=1, url=result.get('secure_url'))
+    except Exception:
+        return jsonify(success=0, message="Upload failed.")
 
 
 @app.route("/api/media/resolve", methods=["POST"])

@@ -42,6 +42,18 @@
   <div class="container-fluid px-4 px-lg-5">
     <div class="row justify-content-center">
       <div class="col-12 {{ '' if post.content_width in ('wide', 'full') else 'col-lg-10 col-xl-9' }}">
+        {% if post.narration_url %}
+        <div class="narration" id="narrationPlayer">
+          <button type="button" class="narration-btn" id="narrationBtn" aria-label="Play narration"><i class="fas fa-play"></i></button>
+          <div class="narration-mid">
+            <span class="narration-label"><i class="fas fa-headphones me-2"></i>Listen to this post — read by {{ post.author.name }}</span>
+            <div class="narration-track" id="narrationTrack"><div class="narration-fill" id="narrationFill"></div></div>
+          </div>
+          <span class="narration-time" id="narrationTime">0:00</span>
+          <audio id="narrationAudio" src="{{ post.narration_url }}" preload="metadata"></audio>
+        </div>
+        {% endif %}
+
         {% if post.layout_type == 'canvas' %}
         <div class="canvas-post-wrapper mx-auto" id="canvasWrapper">
           <iframe id="canvasFrame" src="{{ url_for('show_post_canvas_frame', post_id=post.id) }}" title="{{ post.title }}"></iframe>
@@ -183,6 +195,28 @@
     if (navigator.clipboard) { navigator.clipboard.writeText(url).then(done).catch(function () { window.prompt('Copy this link:', url); }); }
     else { window.prompt('Copy this link:', url); }
   });
+})();
+</script>
+
+<script nonce="{{ csp_nonce }}">
+/* Narration player — independent of the page's background music; both can play. */
+(function () {
+  var audio = document.getElementById('narrationAudio');
+  if (!audio) return;
+  var player = document.getElementById('narrationPlayer');
+  var btn = document.getElementById('narrationBtn');
+  var track = document.getElementById('narrationTrack');
+  var fill = document.getElementById('narrationFill');
+  var timeEl = document.getElementById('narrationTime');
+  function fmt(s) { s = Math.max(0, Math.floor(s || 0)); return Math.floor(s / 60) + ':' + ('0' + (s % 60)).slice(-2); }
+  function setTime() { timeEl.textContent = fmt(audio.currentTime) + (audio.duration ? ' / ' + fmt(audio.duration) : ''); }
+  btn.addEventListener('click', function () { if (audio.paused) { audio.play(); } else { audio.pause(); } });
+  audio.addEventListener('play', function () { btn.innerHTML = '<i class="fas fa-pause"></i>'; player.classList.add('is-playing'); });
+  audio.addEventListener('pause', function () { btn.innerHTML = '<i class="fas fa-play"></i>'; player.classList.remove('is-playing'); });
+  audio.addEventListener('loadedmetadata', setTime);
+  audio.addEventListener('timeupdate', function () { fill.style.width = (audio.duration ? audio.currentTime / audio.duration * 100 : 0) + '%'; setTime(); });
+  audio.addEventListener('ended', function () { btn.innerHTML = '<i class="fas fa-play"></i>'; fill.style.width = '0%'; player.classList.remove('is-playing'); });
+  track.addEventListener('click', function (e) { var r = track.getBoundingClientRect(); if (audio.duration) { audio.currentTime = (e.clientX - r.left) / r.width * audio.duration; } });
 })();
 </script>
 

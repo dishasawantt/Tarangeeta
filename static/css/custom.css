@@ -1152,3 +1152,15 @@ video {
 .post-content .pc-hero-inner { max-width: 660px; }
 .post-content .pc-hero h2 { color: #fff; font-size: 2.2rem; margin: 0 0 .5rem; border: none; padding: 0; text-shadow: 0 2px 12px rgba(0,0,0,.35); }
 .post-content .pc-hero p { color: #fff; font-size: 1.15rem; opacity: .96; margin: 0 0 1rem; text-align: inherit; text-shadow: 0 1px 8px rgba(0,0,0,.3); }
+
+/* ---- Audio narration player (plays alongside the page's background music) ---- */
+.narration { display: flex; align-items: center; gap: 0.9rem; max-width: 950px; margin: 0 auto 1.6rem; background: var(--card-bg); border: 1px solid rgba(139,119,92,0.2); border-left: 4px solid var(--coral); border-radius: 12px; padding: 0.7rem 1rem; box-shadow: 0 2px 12px rgba(92,74,61,0.06); }
+.narration-btn { flex: 0 0 auto; width: 44px; height: 44px; border-radius: 50%; border: none; background: var(--coral); color: #fff; cursor: pointer; font-size: 1rem; display: inline-flex; align-items: center; justify-content: center; transition: background .15s, transform .15s, box-shadow .2s; }
+.narration-btn:hover { background: var(--deep-teal); transform: scale(1.05); }
+.narration-mid { flex: 1; min-width: 0; }
+.narration-label { display: block; font-size: 0.82rem; color: var(--soft-teal); margin-bottom: 0.4rem; }
+.narration-track { height: 6px; background: rgba(139,119,92,0.18); border-radius: 4px; cursor: pointer; overflow: hidden; }
+.narration-fill { height: 100%; width: 0; background: var(--coral); border-radius: 4px; }
+.narration-time { flex: 0 0 auto; font-size: 0.78rem; color: var(--soft-gray); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.narration.is-playing .narration-btn { box-shadow: 0 0 0 4px rgba(196,147,122,0.28); }
+@media (max-width: 640px) { .narration-time { display: none; } .narration-label { font-size: 0.76rem; } }

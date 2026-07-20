@@ -322,3 +322,7 @@ body.be-focus .be-doc { max-width: 780px; box-shadow: none; border-color: transp
 .pc-btn-outline { border: 2px solid var(--coral); color: var(--coral); } .pc-btn-outline:hover { background: var(--coral); color: #fff; }
 .pc-btn-soft { background: rgba(196,147,122,.18); color: var(--coral); } .pc-btn-soft:hover { background: rgba(196,147,122,.32); }
 .pc-align-left { text-align: left; } .pc-align-center { text-align: center; } .pc-align-right { text-align: right; } .pc-align-justify { text-align: justify; }
+
+/* Narration audio field (settings panel) */
+.be-narration { margin-bottom: 8px; min-height: 24px; }
+.be-narration audio { width: 100%; height: 36px; }

@@ -762,7 +762,11 @@
     contentWidth: document.getElementById('beContentWidth'),
     pageBg: document.getElementById('bePageBg'),
     pageBgColor: document.getElementById('bePageBgColor'),
-    pageBgClear: document.getElementById('bePageBgClear')
+    pageBgClear: document.getElementById('bePageBgClear'),
+    narrationUrl: document.getElementById('beNarrationUrl'),
+    narrationFile: document.getElementById('beNarrationFile'),
+    narrationClear: document.getElementById('beNarrationClear'),
+    narrationBox: document.getElementById('beNarrationBox')
   };
   function parseTags(v) {
     return (v || '').split(',').map(function (t) { return t.trim(); }).filter(Boolean);
@@ -819,6 +823,7 @@
         canonical_url: els.canonical.value.trim(),
         content_width: els.contentWidth.value,
         page_bg: els.pageBg.value.trim(),
+        narration_url: els.narrationUrl.value.trim(),
         content_json: saved
       };
       return fetch(CFG.autosaveUrl, {
@@ -901,6 +906,25 @@
     fetch(CFG.uploadUrl, { method: 'POST', headers: { 'X-CSRFToken': CFG.csrf }, body: fd })
       .then(function (r) { return r.json(); })
       .then(function (j) { if (j.success && j.file) { setCover(j.file.url); markDirty(); scheduleSave(); toast('Cover updated'); } else { toast(j.message || 'Upload failed'); } })
+      .catch(function () { toast('Upload failed'); });
+  });
+
+  /* Narration audio */
+  function setNarration(url) {
+    els.narrationUrl.value = url || '';
+    els.narrationBox.innerHTML = url
+      ? '<audio src="' + url + '" controls preload="none"></audio>'
+      : '<span class="be-cover-empty"><i class="fas fa-headphones"></i> No recording yet</span>';
+  }
+  els.narrationUrl.addEventListener('change', function () { setNarration(els.narrationUrl.value.trim()); markDirty(); scheduleSave(); });
+  els.narrationClear.addEventListener('click', function () { setNarration(''); markDirty(); scheduleSave(); toast('Narration removed'); });
+  els.narrationFile.addEventListener('change', function () {
+    if (!els.narrationFile.files.length) return;
+    var fd = new FormData(); fd.append('audio', els.narrationFile.files[0]);
+    toast('Uploading audio…');
+    fetch('/api/editor/upload-audio', { method: 'POST', headers: { 'X-CSRFToken': CFG.csrf }, body: fd })
+      .then(function (r) { return r.json(); })
+      .then(function (j) { if (j.success && j.url) { setNarration(j.url); markDirty(); scheduleSave(); toast('Narration uploaded'); } else { toast(j.message || 'Upload failed'); } })
       .catch(function () { toast('Upload failed'); });
   });
 

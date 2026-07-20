@@ -9,6 +9,7 @@
     autosaveUrl: app.dataset.autosaveUrl,
     uploadUrl: app.dataset.uploadUrl,
     fetchUrl: app.dataset.fetchUrl,
+    resolveUrl: app.dataset.resolveUrl,
     galleryUrl: app.dataset.galleryUrl,
     homeUrl: app.dataset.homeUrl,
     csrf: window.BE_CSRF
@@ -403,6 +404,13 @@
     var fd = new FormData(); fd.append('image', file);
     return fetch(CFG.uploadUrl, { method: 'POST', headers: { 'X-CSRFToken': CFG.csrf }, body: fd }).then(function (r) { return r.json(); });
   }
+  // Turn a pasted link (incl. a Pexels/stock photo page) into a usable image URL.
+  function beResolveUrl(url) {
+    return fetch(CFG.resolveUrl, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CFG.csrf },
+      body: JSON.stringify({ url: url })
+    }).then(function (r) { return r.json(); });
+  }
   var CALLOUT_ICONS = { info: 'fa-circle-info', success: 'fa-circle-check', warning: 'fa-triangle-exclamation', idea: 'fa-lightbulb', quote: 'fa-quote-right', note: 'fa-pen' };
   var CALLOUT_V = ['info', 'success', 'warning', 'idea', 'quote', 'note'];
   var IMG_LAYOUTS = ['contained', 'wide', 'full', 'left', 'right'];
@@ -426,9 +434,17 @@
       var self = this; this.wrap.innerHTML = '';
       var up = el('div', 'be-aimg-upload', '<i class="fas fa-image"></i><span>Upload an image or paste a URL</span>');
       var pick = el('button', 'be-aimg-pick', 'Choose file'); pick.type = 'button';
-      var urlin = el('input', 'be-input'); urlin.placeholder = 'Paste image URL';
+      var urlin = el('input', 'be-input'); urlin.placeholder = 'Paste an image or Pexels link';
       pick.addEventListener('click', function () { self.pickFile(); });
-      urlin.addEventListener('change', function () { if (urlin.value.trim()) { self.data.url = urlin.value.trim(); self.renderImage(); markDirty(); scheduleSave(); } });
+      urlin.addEventListener('change', function () {
+        var v = urlin.value.trim(); if (!v) return;
+        toast('Fetching image…');
+        beResolveUrl(v).then(function (j) {
+          self.data.url = (j && j.success && j.url) ? j.url : v;
+          self.renderImage(); markDirty(); scheduleSave();
+          toast(j && j.rehosted ? 'Image saved to your library' : 'Image added');
+        }).catch(function () { self.data.url = v; self.renderImage(); markDirty(); scheduleSave(); });
+      });
       up.appendChild(pick); this.wrap.appendChild(up); this.wrap.appendChild(urlin);
     }
     pickFile() {
@@ -867,7 +883,17 @@
     els.coverUrl.value = url || '';
     els.coverPrev.innerHTML = url ? '<img src="' + url + '" alt="Cover preview">' : '<span class="be-cover-empty"><i class="fas fa-image"></i> No cover yet</span>';
   }
-  els.coverUrl.addEventListener('change', function () { setCover(els.coverUrl.value.trim()); markDirty(); scheduleSave(); });
+  els.coverUrl.addEventListener('change', function () {
+    var v = els.coverUrl.value.trim();
+    if (!v) { setCover(''); markDirty(); scheduleSave(); return; }
+    toast('Fetching image…');
+    beResolveUrl(v).then(function (j) {
+      var url = (j && j.success && j.url) ? j.url : v;
+      els.coverUrl.value = url; setCover(url);
+      toast(j && j.rehosted ? 'Cover saved to your library' : 'Cover updated');
+      markDirty(); scheduleSave();
+    }).catch(function () { setCover(v); markDirty(); scheduleSave(); });
+  });
   els.coverFile.addEventListener('change', function () {
     if (!els.coverFile.files.length) return;
     var fd = new FormData(); fd.append('image', els.coverFile.files[0]);

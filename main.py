@@ -276,7 +276,7 @@ def set_security_headers(response):
         f"script-src {script_src} https://cdn.jsdelivr.net https://use.fontawesome.com https://cdn.ckeditor.com; "
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.ckeditor.com; "
         "font-src 'self' data: https://fonts.gstatic.com https://use.fontawesome.com https://cdn.ckeditor.com; "
-        "img-src 'self' data: https://res.cloudinary.com https://www.gravatar.com https://images.unsplash.com https://cdn.ckeditor.com; "
+        "img-src 'self' data: https://res.cloudinary.com https://www.gravatar.com https://images.unsplash.com https://images.pexels.com https://cdn.ckeditor.com; "
         "media-src 'self' https://res.cloudinary.com; "
         "connect-src 'self' https://cdn.ckeditor.com; "
         "form-action 'self' https://accounts.google.com; "
@@ -319,6 +319,20 @@ def upload_media(file):
         return result.get('secure_url'), 'video' if is_video else 'image'
     except Exception:
         return None, None
+
+
+def resolve_image_url(url):
+    """Turn a pasted link into a usable direct image URL. Handles stock-photo
+    *pages* (which aren't images) by extracting the underlying photo file."""
+    url = (url or '').strip()
+    if not url:
+        return ''
+    # Pexels photo page, e.g. .../photo/charming-house-33832110/ -> direct image
+    m = re.search(r'pexels\.com/photo/(?:[^/?]*-)?(\d+)/?(?:\?|$)', url)
+    if m:
+        pid = m.group(1)
+        return f'https://images.pexels.com/photos/{pid}/pexels-photo-{pid}.jpeg?auto=compress&cs=tinysrgb&w=1600'
+    return url
 
 
 def init_categories():
@@ -832,6 +846,24 @@ def editor_fetch_image():
     if not url:
         return jsonify(success=0, message="No URL provided.")
     return jsonify(success=1, file={"url": url})
+
+
+@app.route("/api/media/resolve", methods=["POST"])
+@admin_only
+def resolve_image():
+    """Accept a pasted link (incl. a Pexels/stock photo *page*), return a usable
+    image URL — re-hosted on Cloudinary when possible so it's permanent + fast."""
+    raw = (request.get_json(silent=True) or {}).get('url', '')
+    direct = resolve_image_url(raw)
+    if not direct:
+        return jsonify(success=0, message="Please paste a link.")
+    if os.environ.get('CLOUDINARY_CLOUD_NAME'):
+        try:
+            result = cloudinary.uploader.upload(direct, resource_type='image')
+            return jsonify(success=1, url=result.get('secure_url'), rehosted=True)
+        except Exception:
+            pass  # fall back to the direct link
+    return jsonify(success=1, url=direct, rehosted=False)
 
 
 DASHBOARD_STATUSES = ('published', 'draft', 'scheduled', 'archived')

@@ -20,6 +20,7 @@
      data-autosave-url="{{ url_for('autosave_post') }}"
      data-upload-url="{{ url_for('editor_upload_image') }}"
      data-fetch-url="{{ url_for('editor_fetch_image') }}"
+     data-resolve-url="{{ url_for('resolve_image') }}"
      data-gallery-url="{{ url_for('upload_canvas_image') }}"
      data-home-url="{{ url_for('get_all_posts') }}"
      data-dashboard-url="{{ url_for('dashboard') }}">
@@ -118,7 +119,7 @@
         <div class="be-cover" id="beCoverPreview">
           {% if cover_url %}<img src="{{ cover_url }}" alt="Cover preview" />{% else %}<span class="be-cover-empty"><i class="fas fa-image"></i> No cover yet</span>{% endif %}
         </div>
-        <input type="url" id="beCoverUrl" class="be-input" placeholder="Paste image URL" value="{{ cover_url }}" />
+        <input type="url" id="beCoverUrl" class="be-input" placeholder="Paste an image or Pexels link" value="{{ cover_url }}" />
         <label class="be-upload-btn" for="beCoverFile"><i class="fas fa-upload me-1"></i>Upload cover</label>
         <input type="file" id="beCoverFile" accept="image/*" hidden />
       </div>
@@ -220,6 +221,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@editorjs/table@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/editorjs-undo@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/editorjs-drag-drop@1"></script>
-<script src="{{ url_for('static', filename='js/block-editor.js') }}?v=7"></script>
+<script src="{{ url_for('static', filename='js/block-editor.js') }}?v=8"></script>
 </body>
 </html>

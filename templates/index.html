@@ -39,9 +39,12 @@
         {% for post in all_posts %}
         <div class="post-card">
           <a href="{{ url_for('show_post', slug=post.slug) }}" class="post-card-link">
+            <div class="post-card-photo">
+              <img src="{{ post.media_url if post.media_type != 'video' else 'https://images.unsplash.com/photo-1478720568477-152d9b164e26?w=800' }}" alt="{{ post.title }}" loading="lazy">
+            </div>
             {% if post.category %}<span class="post-category">{{ post.category.name }}</span>{% endif %}
             <h2 class="post-card-title">{{ post.title }}</h2>
-            <p class="post-card-subtitle">{{ post.subtitle }}</p>
+            <p class="post-card-subtitle">{{ post.excerpt or post.subtitle }}</p>
             <div class="post-card-meta"><span>{{ post.author.name }}</span><span>·</span><span>{{ post.date }}</span></div>
           </a>
           {% if current_user.is_authenticated and current_user.email == ADMIN_EMAIL %}
